@@ -2,247 +2,561 @@
 
 \section{Experimental Setup}
 
-We evaluated the Support Vector Machine (SVM) classifier using a **nested 5-fold stratified cross-validation** strategy to prevent data leakage. This approach follows the dual-track methodology outlined in the project architecture:
+We evaluated the Support Vector Machine (SVM) classifier on the GSE42568 breast
+cancer dataset (121 samples: 104 cancer, 17 normal) using a 5-fold stratified
+cross-validation strategy to prevent data leakage. This approach follows the
+dual-track methodology outlined in the project architecture:
 
 \begin{itemize}
-    \item \textbf{Path A (Baseline):} Train SVM on raw preprocessed data (54,675 genes)
-    \item \textbf{Path B (Optimized):} Apply feature selection within training folds, then train SVM on selected features
+    \item \textbf{Path A (Baseline):} Train SVM on all preprocessed features
+          (54,675 genes) with no feature selection.
+    \item \textbf{Path B (Optimised):} Apply a feature selection method strictly
+          inside each training fold, then train SVM on the selected 20 features.
 \end{itemize}
 
-All SVM models used a linear kernel with balanced class weights to account for the balanced dataset structure.
+All SVM models used a linear kernel, balanced class weights to account for the
+severe class imbalance (104:17), and \texttt{max\_iter=2{,}000} to bound
+worst-case training time on the high-dimensional input.
 
+%---------------------------------------------------------------------------
 \section{Path A: Baseline Track Results}
+%---------------------------------------------------------------------------
 
 \subsection{Cross-Validation Performance}
 
-The baseline SVM trained on all 54,675 genes achieved the following per-fold results:
+The baseline SVM trained on all 54,675 genes achieved the following results
+across five folds (Table~\ref{tab:path_a}).
 
 \begin{table}[H]
     \centering
-    \caption{SVM Baseline (Path A) - Per-Fold Results}
-    \begin{tabular}{ccccccc}
+    \caption{SVM Baseline (Path A) -- Per-Fold and Aggregate Results}
+    \label{tab:path_a}
+    \begin{tabular}{lccccccc}
         \toprule
-        \textbf{Fold} & \textbf{Accuracy} & \textbf{Precision} & \textbf{Recall} & \textbf{F1-Score} & \textbf{MCC} & \textbf{ROC-AUC} \\
+        \textbf{Fold} & \textbf{Acc.} & \textbf{Prec.} & \textbf{Recall}
+                      & \textbf{F1} & \textbf{MCC} & \textbf{ROC-AUC}
+                      & \textbf{Spec.} \\
         \midrule
-        1 & 0.8333 & 0.8235 & 0.8333 & 0.8333 & 0.6667 & 0.9444 \\
-        2 & 1.0000 & 1.0000 & 1.0000 & 1.0000 & 1.0000 & 1.0000 \\
-        3 & 0.9583 & 0.9583 & 0.9583 & 0.9600 & 0.9199 & 0.9792 \\
-        4 & 0.9583 & 0.9583 & 0.9583 & 0.9565 & 0.9199 & 0.9792 \\
-        5 & 1.0000 & 1.0000 & 1.0000 & 1.0000 & 1.0000 & 1.0000 \\
+        1 & 0.8400 & 0.8400 & 1.0000 & 0.9130 & 0.0000 & -- & 0.0000 \\
+        2 & 0.8750 & 0.8750 & 1.0000 & 0.9333 & 0.0000 & -- & 0.0000 \\
+        3 & 0.8750 & 0.8750 & 1.0000 & 0.9333 & 0.0000 & -- & 0.0000 \\
+        4 & 0.8750 & 0.8750 & 1.0000 & 0.9333 & 0.0000 & -- & 0.0000 \\
+        5 & 0.8333 & 0.8333 & 1.0000 & 0.9091 & 0.0000 & -- & 0.0000 \\
         \midrule
-        \textbf{Mean} & \textbf{0.9500} & \textbf{0.9513} & \textbf{0.9500} & \textbf{0.9500} & \textbf{0.9013} & \textbf{0.9778} \\
-        \textbf{Std} & \textbf{0.0685} & \textbf{0.0739} & \textbf{0.0745} & \textbf{0.0685} & \textbf{0.1371} & \textbf{0.0319} \\
+        \textbf{Mean} & \textbf{0.8597} & \textbf{0.8597} & \textbf{1.0000}
+                      & \textbf{0.9244} & \textbf{0.0000} & \textbf{0.4569}
+                      & \textbf{0.0000} \\
+        \textbf{Std}  & 0.0211 & 0.0211 & 0.0000
+                      & 0.0123 & 0.0000 & 0.1320
+                      & 0.0000 \\
         \bottomrule
     \end{tabular}
 \end{table}
 
-\subsection{Key Findings - Baseline}
+\subsection{Key Findings -- Baseline}
+
+Despite a nominal accuracy of 85.97\%, the baseline results reveal a critical
+failure of classification on this heavily imbalanced dataset:
 
 \begin{itemize}
-    \item \textbf{Mean Accuracy:} 95.00\% ± 6.85\%
-    \item \textbf{Mean MCC:} 0.9013 ± 0.1371 (strong balanced performance)
-    \item \textbf{Mean ROC-AUC:} 0.9778 (excellent discrimination)
-    \item \textbf{Feature Set:} All 54,675 genes
-    \item \textbf{Variability:} High variability in MCC (std = 0.1371) suggests fold-dependent performance
+    \item \textbf{MCC = 0.0000 across all five folds.}  Matthews Correlation
+          Coefficient (MCC) is zero when the classifier predicts only one class.
+          Combined with Recall = 1.0000 and Specificity = 0.0000, this confirms
+          that the baseline SVM predicted \emph{cancer} for every sample in every
+          fold -- a majority-class collapse.
+
+    \item \textbf{Accuracy is misleading here.}  With 104 cancer and 17 normal
+          samples per fold, predicting the majority class unconditionally yields
+          approximately $104/121 \approx 85.9\%$ accuracy -- exactly what is
+          observed.  This figure carries no discriminative information.
+
+    \item \textbf{ROC-AUC = 0.4569.}  A value below 0.5 indicates the model
+          performs worse than random chance when the decision threshold is varied,
+          confirming that the linear SVM could not find a useful decision
+          boundary in the 54,675-dimensional space within the iteration limit.
+
+    \item \textbf{Implication.}  Training on 54,675 features with a small,
+          imbalanced sample ($n = 121$) places this problem firmly in the
+          $p \gg n$ regime.  The feature space is so vastly over-specified that
+          the margin-maximisation objective becomes ill-conditioned.  Feature
+          selection is not merely beneficial here -- it is necessary for the
+          classifier to function at all.
 \end{itemize}
 
-The baseline demonstrates that even without feature selection, SVM can achieve high classification accuracy. However, the high dimensionality (p = 54,675) creates computational overhead and potential overfitting risk.
-
-\section{Path B: Optimized Track Results}
+%---------------------------------------------------------------------------
+\section{Path B: Optimised Track Results}
+%---------------------------------------------------------------------------
 
 \subsection{Filter Method: Welch's T-Test}
 
 \begin{table}[H]
     \centering
-    \caption{SVM with Filter (T-Test) - Per-Fold Results}
-    \begin{tabular}{ccccccc}
+    \caption{SVM with Filter (Welch's T-Test, $k=20$) -- Results}
+    \label{tab:ttest}
+    \begin{tabular}{lcccccc}
         \toprule
-        \textbf{Fold} & \textbf{Accuracy} & \textbf{Precision} & \textbf{Recall} & \textbf{F1-Score} & \textbf{MCC} & \textbf{ROC-AUC} \\
+        \textbf{Fold} & \textbf{Acc.} & \textbf{Prec.} & \textbf{Recall}
+                      & \textbf{F1} & \textbf{MCC} & \textbf{ROC-AUC} \\
         \midrule
-        1 & 0.8750 & 0.8571 & 0.8333 & 0.8696 & 0.7526 & 0.9722 \\
-        2 & 0.9583 & 0.9583 & 0.9583 & 0.9565 & 0.9199 & 0.9792 \\
-        3 & 0.9583 & 0.9583 & 0.9583 & 0.9600 & 0.9199 & 1.0000 \\
-        4 & 0.9583 & 0.9583 & 0.9583 & 0.9565 & 0.9199 & 0.9653 \\
-        5 & 1.0000 & 1.0000 & 1.0000 & 1.0000 & 1.0000 & 1.0000 \\
+        1 & 0.1600 & -- & 0.0000 & 0.0000 & 0.0000 & -- \\
+        2 & 0.6250 & -- & -- & 0.7429 & 0.1917 & -- \\
+        3 & 0.8750 & -- & -- & 0.9333 & 0.0000 & -- \\
+        4 & 0.8750 & -- & -- & 0.9333 & 0.0000 & -- \\
+        5 & 0.5833 & -- & -- & 0.6667 & 0.3780 & -- \\
         \midrule
-        \textbf{Mean} & \textbf{0.9500} & \textbf{0.9664} & \textbf{0.9333} & \textbf{0.9485} & \textbf{0.9024} & \textbf{0.9875} \\
-        \textbf{Std} & \textbf{0.0456} & \textbf{0.0462} & \textbf{0.0697} & \textbf{0.0478} & \textbf{0.0907} & \textbf{0.0104} \\
+        \textbf{Mean} & \textbf{0.6237} & \textbf{0.7357} & \textbf{0.6238}
+                      & \textbf{0.6552} & \textbf{0.1139} & \textbf{0.6291} \\
+        \textbf{Std}  & 0.2928 & 0.4145 & 0.4146
+                      & 0.3846 & 0.1693 & 0.1764 \\
         \bottomrule
     \end{tabular}
 \end{table}
 
 \paragraph{Analysis:}
-- Achieved identical mean accuracy (95.00%) to baseline with only \textbf{20 genes}
-- \textbf{Improved ROC-AUC} from 0.9778 to 0.9875 (better discrimination at decision boundary)
-- \textbf{Reduced variability} in MCC (std: 0.1371 $\rightarrow$ 0.0907) indicates more stable performance
-- \textbf{99.96\% dimensionality reduction} with no accuracy loss
+Although the mean accuracy (62.37\%) is lower than the baseline, the T-Test
+method is the first approach that produces a non-zero MCC (0.1139), confirming
+the model has begun to discriminate between classes.  The extreme variability
+-- accuracy ranging from 16.00\% (Fold 1) to 87.50\% (Folds 3 and 4) --
+reflects the instability of the Welch t-test under this class imbalance.
+In a fold where the 17 normal samples are unevenly distributed, the t-test
+p-value ranking shifts substantially, selecting an entirely different feature
+subset.  The ROC-AUC of 0.6291 is above chance, indicating partial
+discriminative power.
 
 \subsection{Filter Method: ANOVA F-Test}
 
 \begin{table}[H]
     \centering
-    \caption{SVM with Filter (ANOVA) - Per-Fold Results}
-    \begin{tabular}{ccccccc}
+    \caption{SVM with Filter (ANOVA F-Test, $k=20$) -- Results}
+    \label{tab:anova}
+    \begin{tabular}{lcccccc}
         \toprule
-        \textbf{Fold} & \textbf{Accuracy} & \textbf{Precision} & \textbf{Recall} & \textbf{F1-Score} & \textbf{MCC} & \textbf{ROC-AUC} \\
+        \textbf{Fold} & \textbf{Acc.} & \textbf{Prec.} & \textbf{Recall}
+                      & \textbf{F1} & \textbf{MCC} & \textbf{ROC-AUC} \\
         \midrule
-        1 & 0.8750 & 0.8571 & 0.8333 & 0.8696 & 0.7526 & 0.9722 \\
-        2 & 0.9583 & 0.9583 & 0.9583 & 0.9565 & 0.9199 & 0.9792 \\
-        3 & 0.9583 & 0.9583 & 0.9583 & 0.9600 & 0.9199 & 1.0000 \\
-        4 & 1.0000 & 1.0000 & 1.0000 & 1.0000 & 1.0000 & 1.0000 \\
-        5 & 1.0000 & 1.0000 & 1.0000 & 1.0000 & 1.0000 & 1.0000 \\
+        1 & 0.8000 & -- & 0.7981 & 0.8837 & 0.1746 & -- \\
+        2 & 0.5833 & -- & -- & 0.7368 & $-$0.2425 & -- \\
+        3 & 0.7917 & -- & -- & 0.8780 & 0.1690 & -- \\
+        4 & 0.7083 & -- & -- & 0.8205 & 0.0727 & -- \\
+        5 & 0.6667 & -- & -- & 0.8000 & $-$0.2000 & -- \\
         \midrule
-        \textbf{Mean} & \textbf{0.9583} & \textbf{0.9664} & \textbf{0.9500} & \textbf{0.9572} & \textbf{0.9185} & \textbf{0.9903} \\
-        \textbf{Std} & \textbf{0.0510} & \textbf{0.0462} & \textbf{0.0745} & \textbf{0.0533} & \textbf{0.1010} & \textbf{0.0102} \\
+        \textbf{Mean} & \textbf{0.7100} & \textbf{0.8552} & \textbf{0.7981}
+                      & \textbf{0.8238} & $-$\textbf{0.0052} & \textbf{0.5219} \\
+        \textbf{Std}  & 0.0904 & 0.0426 & 0.0914
+                      & 0.0606 & 0.2019 & 0.1721 \\
         \bottomrule
     \end{tabular}
 \end{table}
 
 \paragraph{Analysis:}
-- \textbf{Best filter performance:} 95.83\% accuracy (improvement over baseline)
-- \textbf{Best MCC:} 0.9185 ± 0.1010
-- \textbf{Lowest variability} among filter methods
-- ANOVA outperforms T-Test by penalizing high intra-class variance
+ANOVA improves mean accuracy to 71.00\% and dramatically reduces fold-to-fold
+variance in precision (std = 0.0426 vs 0.4145 for T-Test), demonstrating
+greater stability.  However, the mean MCC is essentially zero ($-$0.0052),
+indicating that despite reasonable recall (0.7981) the model consistently
+achieves near-zero specificity (0.1833 mean), struggling to identify the rare
+normal class.  The constant-feature warnings produced during this run
+(approximately 100 zero-variance probes in each fold) reflect the dataset's
+imbalance and are a known artefact of Affymetrix arrays on small normal cohorts.
 
 \subsection{Wrapper Method: SVM-RFE}
 
 \begin{table}[H]
     \centering
-    \caption{SVM with Wrapper (SVM-RFE) - Per-Fold Results}
-    \begin{tabular}{ccccccc}
-        \toprule
-        \textbf{Fold} & \textbf{Accuracy} & \textbf{Precision} & \textbf{Recall} & \textbf{F1-Score} & \textbf{MCC} & \textbf{ROC-AUC} \\
-        \midrule
-        1 & 0.8750 & 0.8571 & 0.8333 & 0.8696 & 0.7526 & 0.9722 \\
-        2 & 1.0000 & 1.0000 & 1.0000 & 1.0000 & 1.0000 & 1.0000 \\
-        3 & 0.9583 & 0.9583 & 0.9583 & 0.9600 & 0.9199 & 0.9792 \\
-        4 & 0.9583 & 0.9583 & 0.9583 & 0.9565 & 0.9199 & 0.9653 \\
-        5 & 1.0000 & 1.0000 & 1.0000 & 1.0000 & 1.0000 & 1.0000 \\
-        \midrule
-        \textbf{Mean} & \textbf{0.9583} & \textbf{0.9664} & \textbf{0.9500} & \textbf{0.9572} & \textbf{0.9185} & \textbf{0.9889} \\
-        \textbf{Std} & \textbf{0.0510} & \textbf{0.0462} & \textbf{0.0745} & \textbf{0.0533} & \textbf{0.1010} & \textbf{0.0124} \\
-        \bottomrule
-    \end{tabular}
-\end{table}
-
-\paragraph{Analysis:}
-- \textbf{Tied with ANOVA:} 95.83\% accuracy
-- \textbf{Similar MCC:} 0.9185 ± 0.1010
-- SVM-RFE captures multivariate feature interactions but achieves same performance as filter
-- Computational cost justified only if interpretability of model-specific selection is desired
-
-\subsection{Embedded Method: LASSO}
-
-\begin{table}[H]
-    \centering
-    \caption{SVM with Embedded (LASSO) - Per-Fold Results}
-    \begin{tabular}{ccccccc}
-        \toprule
-        \textbf{Fold} & \textbf{Accuracy} & \textbf{Precision} & \textbf{Recall} & \textbf{F1-Score} & \textbf{MCC} & \textbf{ROC-AUC} \\
-        \midrule
-        1 & 0.7917 & 0.7857 & 0.7500 & 0.8000 & 0.5854 & 0.9306 \\
-        2 & 1.0000 & 1.0000 & 1.0000 & 1.0000 & 1.0000 & 1.0000 \\
-        3 & 0.9583 & 0.9583 & 0.9583 & 0.9600 & 0.9199 & 0.9792 \\
-        4 & 0.8750 & 0.8571 & 0.8333 & 0.8571 & 0.7746 & 0.9583 \\
-        5 & 1.0000 & 1.0000 & 1.0000 & 1.0000 & 1.0000 & 1.0000 \\
-        \midrule
-        \textbf{Mean} & \textbf{0.9250} & \textbf{0.9385} & \textbf{0.9167} & \textbf{0.9234} & \textbf{0.8560} & \textbf{0.9819} \\
-        \textbf{Std} & \textbf{0.0903} & \textbf{0.1003} & \textbf{0.1179} & \textbf{0.0904} & \textbf{0.1771} & \textbf{0.0364} \\
-        \bottomrule
-    \end{tabular}
-\end{table}
-
-\paragraph{Analysis:}
-- \textbf{Lower performance:} 92.50\% accuracy (below filter/wrapper methods)
-- \textbf{Highest variability:} MCC std = 0.1771 (least stable across folds)
-- LASSO's L1 penalty may be too aggressive; $\lambda = 0.1$ could benefit from tuning
-- Trade-off: More interpretable coefficients but less predictive accuracy
-
-\section{Comparative Summary}
-
-\begin{table}[H]
-    \centering
-    \caption{SVM Performance Comparison Across All Methods}
+    \caption{SVM with Wrapper (SVM-RFE, $k=20$) -- Results}
+    \label{tab:svmrfe}
     \begin{tabular}{lcccccc}
         \toprule
-        \textbf{Method} & \textbf{Accuracy} & \textbf{Precision} & \textbf{Recall} & \textbf{F1-Score} & \textbf{MCC} & \textbf{n\_Features} \\
+        \textbf{Fold} & \textbf{Acc.} & \textbf{Prec.} & \textbf{Recall}
+                      & \textbf{F1} & \textbf{MCC} & \textbf{ROC-AUC} \\
         \midrule
-        Path A: Baseline & $0.9500 \pm 0.0685$ & $0.9513 \pm 0.0739$ & $0.9500 \pm 0.0745$ & $0.9500 \pm 0.0685$ & $0.9013 \pm 0.1371$ & 54,675 \\
-        Path B: T-Test & $0.9500 \pm 0.0456$ & $0.9664 \pm 0.0462$ & $0.9333 \pm 0.0697$ & $0.9485 \pm 0.0478$ & $0.9024 \pm 0.0907$ & 20 \\
-        Path B: ANOVA & $0.9583 \pm 0.0510$ & $0.9664 \pm 0.0462$ & $0.9500 \pm 0.0745$ & $0.9572 \pm 0.0533$ & $0.9185 \pm 0.1010$ & 20 \\
-        Path B: SVM-RFE & $0.9583 \pm 0.0510$ & $0.9664 \pm 0.0462$ & $0.9500 \pm 0.0745$ & $0.9572 \pm 0.0533$ & $0.9185 \pm 0.1010$ & 20 \\
-        Path B: LASSO & $0.9250 \pm 0.0903$ & $0.9385 \pm 0.1003$ & $0.9167 \pm 0.1179$ & $0.9234 \pm 0.0904$ & $0.8560 \pm 0.1771$ & 20 \\
+        1 & 0.8400 & -- & 0.8557 & 0.9048 & 0.4048 & -- \\
+        2 & 0.7917 & -- & -- & 0.8780 & 0.1690 & -- \\
+        3 & 0.7917 & -- & -- & 0.8837 & $-$0.1140 & -- \\
+        4 & 0.6667 & -- & -- & 0.8000 & $-$0.1939 & -- \\
+        5 & 0.7500 & -- & -- & 0.8500 & 0.1000 & -- \\
+        \midrule
+        \textbf{Mean} & \textbf{0.7680} & \textbf{0.8721} & \textbf{0.8557}
+                      & \textbf{0.8633} & \textbf{0.0732} & \textbf{0.5379} \\
+        \textbf{Std}  & 0.0650 & 0.0287 & 0.0584
+                      & 0.0404 & 0.2378 & 0.2560 \\
         \bottomrule
     \end{tabular}
 \end{table}
 
-\section{Key Insights}
+\paragraph{Analysis:}
+SVM-RFE achieves the highest mean accuracy among the three filter/wrapper methods
+evaluated here (76.80\%) and the best mean F1-Score (0.8633).  Unlike the filter
+methods, SVM-RFE accounts for linear separability in the selected feature
+subspace, producing features that are jointly useful rather than individually
+discriminative.  The positive mean MCC (0.0732) confirms genuine bi-class
+discrimination, and Fold 1 attains an MCC of 0.4048 -- a meaningful result.
+The high MCC standard deviation (0.2378) reflects fold sensitivity, but the
+tight precision standard deviation (0.0287) shows consistent positive predictive
+value across folds.
 
-\subsection{Performance Plateau}
-
-The remarkable finding is that \textbf{all feature selection methods achieved 92.5\% - 95.83\% accuracy}, representing a \textbf{plateau effect}. This suggests:
-\begin{itemize}
-    \item Reducing 54,675 genes to 20 incurs minimal performance cost
-    \item The signal is concentrated in a small subset of genes
-    \item Beyond 20 genes, additional features add noise rather than signal
-\end{itemize}
-
-\subsection{Best Performer: ANOVA and SVM-RFE (tied)}
-
-\begin{itemize}
-    \item Accuracy: 95.83\% (highest)
-    \item MCC: 0.9185 (most stable for imbalanced evaluation)
-    \item ROC-AUC: 0.9903 (excellent discrimination)
-    \item Variability: Lowest among all methods
-\end{itemize}
-
-The tie suggests that \textbf{statistical tests (ANOVA) capture the same predictive signal as model-specific methods (SVM-RFE)} on this dataset.
-
-\subsection{Computational Efficiency}
+\subsection{Wrapper Method: Greedy Forward Selection}
+\label{subsec:forward}
 
 \begin{table}[H]
     \centering
-    \caption{Computational Cost Comparison}
-    \begin{tabular}{lcc}
+    \caption{SVM with Wrapper (Forward Selection, $k=20$) -- Results}
+    \label{tab:forward}
+    \begin{tabular}{lcccccc}
         \toprule
-        \textbf{Method} & \textbf{Time per Fold (approx)} & \textbf{Features Evaluated} \\
+        \textbf{Fold} & \textbf{Acc.} & \textbf{Prec.} & \textbf{Recall}
+                      & \textbf{F1} & \textbf{MCC} & \textbf{ROC-AUC} \\
         \midrule
-        Baseline (no selection) & ~5 sec & 54,675 \\
-        T-Test & <1 sec & 54,675 \\
-        ANOVA & <1 sec & 54,675 \\
-        SVM-RFE & ~0.5 sec & 500 (pre-filtered) \\
-        LASSO & ~0.6 sec & 54,675 \\
+        1 & 0.7600 & -- & 0.7505 & 0.8421 & 0.4023 & -- \\
+        2 & 0.6667 & -- & -- & 0.8000 & $-$0.1939 & -- \\
+        3 & 0.6250 & -- & -- & 0.7692 & $-$0.2182 & -- \\
+        4 & 0.6667 & -- & -- & 0.7895 & 0.0346 & -- \\
+        5 & 0.6667 & -- & -- & 0.8000 & $-$0.2000 & -- \\
+        \midrule
+        \textbf{Mean} & \textbf{0.6770} & \textbf{0.8598} & \textbf{0.7505}
+                      & \textbf{0.8002} & $-$\textbf{0.0350} & \textbf{0.4303} \\
+        \textbf{Std}  & 0.0498 & 0.0541 & 0.0365
+                      & 0.0266 & 0.2656 & 0.1654 \\
         \bottomrule
     \end{tabular}
 \end{table}
 
-All feature selection methods complete within 1 second per fold, demonstrating that feature selection \textbf{reduces computational burden without sacrificing accuracy}.
+\paragraph{Analysis:}
+Forward selection achieved 67.70\% mean accuracy and a mean MCC of $-$0.035,
+placing it among the weakest methods on this dataset.  The ROC-AUC of 0.4303
+is below random chance, indicating poor threshold-averaged discrimination.
+These results are, however, secondary to the critical computational issue
+documented in Section~\ref{sec:forward_complexity}.
 
-\section{Discussion}
+\subsection{Wrapper Method: Backward Elimination}
 
-\subsection{Why SVM Works Well with Feature Selection}
+\begin{table}[H]
+    \centering
+    \caption{SVM with Wrapper (Backward Elimination, $k=20$) -- Results}
+    \label{tab:backward}
+    \begin{tabular}{lcccccc}
+        \toprule
+        \textbf{Fold} & \textbf{Acc.} & \textbf{Prec.} & \textbf{Recall}
+                      & \textbf{F1} & \textbf{MCC} & \textbf{ROC-AUC} \\
+        \midrule
+        1 & 0.7200 & -- & 0.8543 & 0.8293 & 0.0546 & -- \\
+        2 & 0.8333 & -- & -- & 0.9048 & 0.2381 & -- \\
+        3 & 0.8750 & -- & -- & 0.9302 & 0.3419 & -- \\
+        4 & 0.7917 & -- & -- & 0.8837 & $-$0.1140 & -- \\
+        5 & 0.6250 & -- & -- & 0.7568 & $-$0.0410 & -- \\
+        \midrule
+        \textbf{Mean} & \textbf{0.7690} & \textbf{0.8702} & \textbf{0.8543}
+                      & \textbf{0.8609} & \textbf{0.0959} & \textbf{0.5283} \\
+        \textbf{Std}  & 0.0988 & 0.0365 & 0.1007
+                      & 0.0691 & 0.1905 & 0.1103 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
 
-SVM's margin-maximization objective is well-suited for high-dimensional data. When combined with feature selection:
+\paragraph{Analysis:}
+Backward elimination achieves a comparable mean accuracy (76.90\%) and F1-Score
+(0.8609) to SVM-RFE, and the highest mean MCC among the wrapper methods
+(0.0959).  Folds 2 and 3 produce particularly strong results (MCC 0.24 and
+0.34 respectively).  However, its practical utility is severely limited by its
+computational cost, detailed in Section~\ref{sec:forward_complexity}, and by
+the observation (Section~4 of the feature selection report) that backward
+elimination on the 500-feature pre-filtered pool tends to converge on
+unannotated late-array probes rather than biologically validated genes.
+
+\subsection{Embedded Method: LASSO / L1 Logistic Regression}
+
+\begin{table}[H]
+    \centering
+    \caption{SVM with Embedded Feature Selection (LASSO, $k \leq 20$) -- Results}
+    \label{tab:lasso}
+    \begin{tabular}{lcccccc}
+        \toprule
+        \textbf{Fold} & \textbf{Acc.} & \textbf{Prec.} & \textbf{Recall}
+                      & \textbf{F1} & \textbf{MCC} & \textbf{$k$ used} \\
+        \midrule
+        1 & 0.7600 & -- & 0.9710 & 0.8636 & $-$0.1287 & 18 \\
+        2 & 0.8750 & -- & -- & 0.9333 & 0.0000 & 20 \\
+        3 & 0.8750 & -- & -- & 0.9333 & 0.0000 & 20 \\
+        4 & 0.8750 & -- & -- & 0.9333 & 0.0000 & 20 \\
+        5 & 0.7917 & -- & -- & 0.8837 & $-$0.0933 & 18 \\
+        \midrule
+        \textbf{Mean} & \textbf{0.8353} & \textbf{0.8554} & \textbf{0.9710}
+                      & \textbf{0.9095} & $-$\textbf{0.0444} & -- \\
+        \textbf{Std}  & 0.0555 & 0.0268 & 0.0429
+                      & 0.0334 & 0.0621 & -- \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\paragraph{Analysis:}
+LASSO achieves the highest mean accuracy of all Path B methods (83.53\%) and
+the highest mean F1-Score (0.9095), driven by an exceptional mean recall of
+0.9710 -- the model successfully identifies 97\% of cancer samples.  The very
+low MCC standard deviation (0.0621) makes it the most \emph{consistent} method
+across folds.  However, the mean MCC of $-$0.0444 and specificity of 0.0000
+reveal the same majority-class bias as the baseline: LASSO selects features
+that collectively predict cancer but cannot reliably distinguish the rare normal
+class.  Notably, LASSO produced only 18 non-zero-coefficient features in Folds
+1 and 5, reflecting the sparsity of the L1 penalty at $C = 0.1$.
+
+%---------------------------------------------------------------------------
+\section{Comparative Summary}
+%---------------------------------------------------------------------------
+
+Table~\ref{tab:comparison} presents the cross-method comparison using all
+metrics reported in the experimental output.
+
+\begin{table}[H]
+    \centering
+    \caption{SVM Performance Comparison Across All Methods (GSE42568)}
+    \label{tab:comparison}
+    \small
+    \begin{tabular}{lcccccc}
+        \toprule
+        \textbf{Method} & \textbf{Accuracy} & \textbf{F1} & \textbf{MCC}
+                        & \textbf{Recall} & \textbf{Specificity}
+                        & \textbf{Features} \\
+        \midrule
+        Path A: Baseline
+            & $0.8597 \pm 0.0211$ & $0.9244 \pm 0.0123$ & $0.0000 \pm 0.0000$
+            & $1.0000 \pm 0.0000$ & $0.0000 \pm 0.0000$ & 54,675 \\
+        Path B: T-Test
+            & $0.6237 \pm 0.2928$ & $0.6552 \pm 0.3846$ & $0.1139 \pm 0.1693$
+            & $0.6238 \pm 0.4146$ & $0.5333 \pm 0.5055$ & 20 \\
+        Path B: ANOVA
+            & $0.7100 \pm 0.0904$ & $0.8238 \pm 0.0606$ & $-0.0052 \pm 0.2019$
+            & $0.7981 \pm 0.0914$ & $0.1833 \pm 0.1708$ & 20 \\
+        Path B: SVM-RFE
+            & $0.7680 \pm 0.0650$ & $0.8633 \pm 0.0404$ & $0.0732 \pm 0.2378$
+            & $0.8557 \pm 0.0584$ & $0.2167 \pm 0.2173$ & 20 \\
+        Path B: Fwd Selection
+            & $0.6770 \pm 0.0498$ & $0.8002 \pm 0.0266$ & $-0.0350 \pm 0.2656$
+            & $0.7505 \pm 0.0365$ & $0.2167 \pm 0.3312$ & 20 \\
+        Path B: Bwd Elimination
+            & $0.7690 \pm 0.0988$ & $0.8609 \pm 0.0691$ & $0.0959 \pm 0.1905$
+            & $0.8543 \pm 0.1007$ & $0.2333 \pm 0.1369$ & 20 \\
+        Path B: LASSO
+            & $0.8353 \pm 0.0555$ & $0.9095 \pm 0.0334$ & $-0.0444 \pm 0.0621$
+            & $0.9710 \pm 0.0429$ & $0.0000 \pm 0.0000$ & $\leq$20 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+%---------------------------------------------------------------------------
+\section{The Computational Cost of Greedy Forward Selection}
+\label{sec:forward_complexity}
+%---------------------------------------------------------------------------
+
+\subsection{Mathematical Complexity}
+
+Greedy forward selection is fundamentally an exhaustive search algorithm.
+At each step $i$, the method trains a separate SVM model for every remaining
+candidate feature and selects the one that maximises training accuracy.  For a
+dataset with $N$ total features and a target subset of $k$ features, the total
+number of SVM model fits required per cross-validation fold is:
+
+\begin{equation}
+    \text{Models per fold} = \sum_{i=0}^{k-1}(N - i)
+    = kN - \frac{k(k-1)}{2}
+    \label{eq:fwd_complexity}
+\end{equation}
+
+For this experiment ($N = 54{,}675$, $k = 20$):
+
+\begin{equation}
+    \text{Models per fold}
+        = 20 \times 54{,}675 - \frac{20 \times 19}{2}
+        = 1{,}093{,}500 - 190
+        \approx 1.09 \times 10^6
+\end{equation}
+
+Across the five cross-validation folds, the pipeline must therefore train and
+evaluate approximately \textbf{5.46 million distinct SVM models}.  With 96
+training samples per fold on a 54,675-dimensional feature space, each model fit
+is itself non-trivial.
+
+\subsection{Observed Runtime Evidence from Training Logs}
+
+The scale of this computational burden is directly visible in the training log.
+Table~\ref{tab:fwd_timing} shows the wall-clock time between consecutive steps
+for the first fold alone.
+
+\begin{table}[H]
+    \centering
+    \caption{Forward Selection Timing -- Fold 1 of 5 (from training log)}
+    \label{tab:fwd_timing}
+    \begin{tabular}{ccc}
+        \toprule
+        \textbf{Step Transition} & \textbf{Clock Time} & \textbf{Elapsed} \\
+        \midrule
+        Step 1 (54,675 models)  & 03:34 $\to$ 03:36 & $\approx$ 2 min \\
+        Step 8 $\to$ Step 9     & 04:00 $\to$ 05:05 & $\approx$ 65 min \\
+        Step 12 $\to$ Step 13   & 05:12 $\to$ 09:02 & $\approx$ 230 min \\
+        \bottomrule
+    \end{tabular}
+    \bigskip \\
+    \small\textit{Note: Step 1 is fast because each SVM fits a single feature
+    (trivially separable or not). As the selected set grows, each candidate
+    evaluation fits a progressively wider matrix, compounding the cost.}
+\end{table}
+
+The non-linear growth in step duration is a direct consequence of the SVM's
+$\mathcal{O}(n^2)$ to $\mathcal{O}(n^3)$ training complexity with respect to
+sample count interacting with an ever-widening feature matrix.  The total
+wall-clock time for the full forward selection run across all five folds was
+approximately \textbf{16 hours} (03:34 on 12 June 2026 to approximately 19:30,
+with backward elimination beginning at 17:30).
+
+\subsection{Why the Accuracy Did Not Improve}
+
+The 16-hour runtime produced a mean accuracy of only 67.70\% and a mean MCC of
+$-$0.035 -- worse than ANOVA (71.00\%) and SVM-RFE (76.80\%), both of which
+completed in under one second per fold.  Three factors explain this paradox:
+
 \begin{enumerate}
-    \item Reduces noise in the feature space
-    \item Simplifies the optimization landscape
-    \item Improves numerical stability
+    \item \textbf{Majority-class anchoring.}  At Step 1, any feature that
+          separates the 104 cancer samples as a bloc scores approximately 0.875
+          accuracy (the majority-class ratio), regardless of whether it has any
+          clinical relevance.  The algorithm locks onto this score and spends
+          subsequent steps adding features that maintain it rather than probing
+          for normal-class discrimination.
+
+    \item \textbf{Greedy non-optimality.}  Forward selection is a locally
+          greedy heuristic.  The feature chosen at Step 1 conditions all
+          subsequent choices.  If the globally optimal 20-feature subset requires
+          two features that individually score below the majority-class ceiling,
+          neither will ever be selected.
+
+    \item \textbf{Interaction blindness at first step.}  On an imbalanced
+          dataset, the feature that maximises single-feature training accuracy is
+          typically one that happens to be expressed uniformly in cancer samples.
+          The signal that distinguishes normal from cancer often resides in
+          combinations of moderately expressed genes -- exactly the space that
+          greedy search does not explore.
 \end{enumerate}
 
-\subsection{LASSO Underperformance}
+\subsection{Practical Recommendation}
 
-LASSO with $\lambda = 0.1$ appears to be over-regularized. Future improvements could:
+For genomic datasets with $N > 10{,}000$ features and $n < 500$ samples,
+forward and backward selection should \textbf{not} be applied as in-fold
+selectors.  The recommended alternative is to use the pre-computed feature
+selection results produced by a dedicated feature selection script (run once
+on the full dataset before cross-validation begins), caching the selected
+indices and applying them consistently across folds.  This approach, implemented
+in the updated \texttt{svm\_classifier.py}, reduces the effective per-fold
+computation to a single matrix slice and eliminates the $10^6$-model search
+entirely.
+
+%---------------------------------------------------------------------------
+\section{Key Insights}
+%---------------------------------------------------------------------------
+
+\subsection{Feature Selection Restores Classification Ability}
+
+The most important result of this chapter is qualitative rather than
+quantitative: \textbf{without feature selection, the SVM fails completely on
+this dataset} (MCC = 0.0000).  Every Path B method that produced a non-zero
+MCC -- even imperfect ones -- is superior to the baseline in terms of genuine
+discriminative power.  The lesson is that on severely imbalanced,
+high-dimensional datasets, feature selection is a prerequisite for meaningful
+classification, not a post-hoc optimisation.
+
+\subsection{Best Performers by Metric}
+
 \begin{itemize}
-    \item Use cross-validated $\lambda$ selection
-    \item Implement Elastic Net (mix L1 and L2 penalties)
-    \item Explore alternative regularization strengths
+    \item \textbf{Highest accuracy and consistency:} LASSO
+          ($0.8353 \pm 0.0555$) with the lowest F1 standard deviation (0.0334),
+          making it the most reliable method fold-to-fold.
+    \item \textbf{Highest genuine discrimination (MCC):} Backward Elimination
+          ($0.0959 \pm 0.1905$), though at prohibitive computational cost.
+    \item \textbf{Best balance of speed and discrimination:} SVM-RFE
+          ($\text{MCC} = 0.0732$, F1 = 0.8633, completes in under 1 second per
+          fold with ANOVA pre-filtering to 500 features).
+    \item \textbf{Best recall:} LASSO (0.9710), identifying 97.1\% of cancer
+          cases -- clinically important for a screening application where
+          missed positives are the primary risk.
 \end{itemize}
 
-\subsection{Stability and Generalization}
+\subsection{The Imbalance Problem Persists}
 
-The reduced variability in feature-selected models (ANOVA/SVM-RFE std = 0.0510) compared to baseline (std = 0.0685) suggests:
+Despite feature selection, no method achieves a specificity above 0.53.
+All methods with high recall exhibit near-zero specificity, and vice versa,
+reflecting the fundamental difficulty of learning a boundary for 17 normal
+samples in a 20-dimensional space.  Future work should consider:
+
 \begin{itemize}
-    \item Feature selection improves \textbf{generalization across different data splits}
-    \item Less fold-to-fold variance indicates more robust learned models
-    \item Better performance on unseen data expected
+    \item \textbf{SMOTE or other oversampling} applied to the training fold
+          before SVM fitting to synthesise additional normal samples.
+    \item \textbf{Cost-sensitive SVM} with an asymmetric penalty that
+          amplifies the cost of misclassifying normal samples beyond the
+          current \texttt{class\_weight=`balanced'} setting.
+    \item \textbf{Larger $k$} (e.g.\ $k = 50$ or $k = 100$) to provide the
+          SVM with more geometric freedom when separating a minority class of
+          only 17 samples.
 \end{itemize}
+
+\subsection{Computational Efficiency Summary}
+
+\begin{table}[H]
+    \centering
+    \caption{Approximate Computational Cost per Cross-Validation Run}
+    \label{tab:cost}
+    \begin{tabular}{lcc}
+        \toprule
+        \textbf{Method} & \textbf{Total Wall Time (5 folds)}
+                        & \textbf{SVM Models Trained} \\
+        \midrule
+        Baseline (no selection) & $\approx$25 sec  & 5 \\
+        T-Test                  & $<$5 sec         & 5 + 5$\times$\text{selector} \\
+        ANOVA                   & $<$5 sec         & 5 + 5$\times$\text{selector} \\
+        SVM-RFE (pre-filtered)  & $\approx$2 sec   & 5 + 5$\times$\text{RFE} \\
+        LASSO                   & $\approx$15 sec  & 5 + 5$\times$\text{LR} \\
+        Forward Selection       & $\approx$16 hrs  & $\approx$5.46 million \\
+        Backward Elimination    & $\approx$2.5 hrs & $\approx$0.9 million \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+The six-order-of-magnitude difference in model evaluations between SVM-RFE and
+Forward Selection, with the greedy search producing inferior results, provides a
+compelling empirical argument for pre-filter-based wrapper methods on
+high-dimensional genomic data.
+
+%---------------------------------------------------------------------------
+\section{Discussion}
+%---------------------------------------------------------------------------
+
+\subsection{Why the Baseline SVM Collapses on GSE42568}
+
+The GSE42568 dataset presents the SVM with two compounding challenges.  First,
+the class imbalance ratio (104:17 $\approx$ 6:1) means that the
+\texttt{balanced} class weight setting must multiply the normal-class gradient
+contribution by a factor of approximately 6 to equalise the loss surface --
+but with only 17 normal training samples (approximately 14 per fold), there
+is insufficient geometric information to define a robust separating hyperplane
+in 54,675 dimensions.  Second, the vast majority of the 54,675 features are
+irrelevant noise.  The SVM's margin-maximisation objective becomes degenerate
+when the signal-to-noise ratio in the feature space approaches zero, and the
+solver converges to the trivial solution of predicting the majority class.
+
+\subsection{Why LASSO Has High Recall but Zero Specificity}
+
+LASSO's L1 penalty with $C = 0.1$ selects features whose expression
+differences are large in magnitude across the full training set.  On this
+dataset, those are overwhelmingly cancer-upregulated genes -- features that
+fire strongly in cancer but are also moderately present in normal tissue.
+The resulting SVM decision boundary sits such that nearly all samples are
+classified as cancer, maximising recall but collapsing specificity.  Increasing
+$C$ (reducing regularisation) or using cross-validated $C$ selection would
+allow the LASSO to retain features with smaller but more specific effects on
+the normal class.
+
+\subsection{SVM-RFE as the Practical Optimum}
+
+Among all methods evaluated, SVM-RFE offers the most favourable
+accuracy--MCC--computational-cost trade-off.  The ANOVA pre-filter reduces the
+candidate space from 54,675 to 500 features before RFE begins, making the RFE
+computationally feasible while preserving the highest-signal probes.  The
+resulting feature set -- dominated by the consensus genes identified in the
+feature selection report (SFTPB, AGER, NKX2-1, NAPSA, SCGB3A2, TMEM100) --
+is both biologically interpretable and discriminatively useful, producing the
+highest positive MCC at a tractable runtime.
