@@ -115,7 +115,7 @@ Due to an execution environment error with the RF-RFE module (AST numeric attrib
         \bottomrule
     \end{tabular}
     \vspace{-0.5cm}
-\end{table}
+             \item \textbf{Target Features Selection:} 20 (default) or user-defined p-value threshold $\alpha$ for filter methods [cite: 26]
 
 \section{Embedded Method Results}
 
@@ -141,19 +141,19 @@ The L1-regularized logistic regression model achieved a strict 100\% reduction t
         9 & 207302\_at & 19 & 242600\_at \\
         10 & 210608\_s\_at & 20 & 43511\_s\_at \\
         \bottomrule
-    \end{tabular}
+             Welch's T-Test successfully reduced the dataset from 54,675 to the subset of features meeting the p-value threshold (or to the top 20 by default), achieving a dramatic dimensionality reduction[cite: 27]. 
 \end{table}
 
 \section{Feature Overlap and Consensus Analysis}
 
-\subsection{Consensus Results}
+             The ANOVA F-Test yielded a nearly identical reduction profile; features were selected either by p-value threshold or by top-ranked F-scores (top 20 by default)[cite: 28].
 
 \begin{table}[H]
     \centering
     \caption{Feature Overlap Across Methods}
     \begin{tabular}{lcc}
         \toprule
-        \textbf{Comparison} & \textbf{Overlap Count} & \textbf{Percentage} \\
+             The L1-regularized logistic regression model retained genes with non-zero coefficients; the number of retained genes depends on the regularization strength and may differ from 20 (the pipeline's default target) [cite: 31]. 
         \midrule
         Shared by Both Filters (T-Test \& ANOVA) & 17/20 & 85\% \\
         Shared by T-Test, ANOVA, SVM \& LASSO & 6/20 & 30\% \\
@@ -164,7 +164,7 @@ The L1-regularized logistic regression model achieved a strict 100\% reduction t
 \subsection{Universal Biomarkers \& Biological Interpretation}
 
 Six genes appeared in the top 20 across the core analytical frameworks (T-Test, ANOVA, SVM-RFE, and LASSO), representing universal consensus biomarkers:
-\begin{enumerate}
+             \item \textbf{Dimensionality Reduction:} From 54,675 genes to a small subset (default top 20) or to all genes meeting a user-defined p-value threshold, representing a >99\% reduction in dimensionality
     \item 228540\_at
     \item 230469\_at
     \item 202524\_s\_at
@@ -255,7 +255,7 @@ We evaluated classification performance using Support Vector Machine (SVM) with 
 
 \begin{itemize}
     \item \textbf{Performance:} MCC = 0.9370 (good but slightly lower)
-    \item \textbf{Sparsity:} Standardized at 20 genes to match other methods [cite: 31]
+    \item \textbf{Sparsity:} Standardized at 20 genes to match other methods by default; filters may alternatively select all genes below a p-value threshold $\alpha$ [cite: 31]
     \item \textbf{Advantage:} Simultaneously performs feature selection and model training; more interpretable coefficients
     \item \textbf{Regularization Sensitivity:} Performance depends on $\lambda$ tuning; may benefit from cross-validated $\lambda$ optimization
 \end{itemize}

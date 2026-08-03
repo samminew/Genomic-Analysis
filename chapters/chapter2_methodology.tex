@@ -67,7 +67,7 @@ where:
 
 Welch's variant does not assume equal variances ($\sigma_c^2 \neq \sigma_n^2$), which is realistic for cancer data where diseased tissue exhibits higher genetic heterogeneity.
 
-\textbf{Output:} Genes ranked by $p$-value (smallest first). Top 20 genes selected.
+\textbf{Output:} Genes ranked by $p$-value (smallest first). By default the top 20 genes are reported; optionally a user-defined p-value threshold $\alpha$ can be supplied and all genes with $p \leq \alpha$ will be selected instead of a fixed top-$k$.
 
 \subsubsection{ANOVA F-Test}
 
@@ -84,7 +84,7 @@ where:
 
 \textbf{Advantage:} ANOVA penalizes features with high intra-class variance, prioritizing genes with consistent, homogeneous expression within each group.
 
-\textbf{Output:} Genes ranked by $F$-score (highest first). Top 20 genes selected.
+\textbf{Output:} Genes ranked by $F$-score (highest first) and associated $p$-values. By default the top 20 genes are reported; optionally a user-defined p-value threshold $\alpha$ can be supplied and all genes with $p \leq \alpha$ will be selected instead of a fixed top-$k$.
 
 \subsection{Wrapper Methods}
 

@@ -95,9 +95,13 @@ class FeatureSelector:
         "embedded_lasso":   "LASSO / L1 Logistic (Embedded)",
     }
 
-    def __init__(self, method: str = "filter_ttest", n_features: int = 20) -> None:
+    def __init__(self, method: str = "filter_ttest", n_features: int = 20, p_value: Optional[float] = None) -> None:
         self.method = method
         self.n_features = n_features
+        # If p_value is provided, filter-based methods will select features
+        # whose p-values are <= p_value instead of selecting a fixed top-k.
+        # Wrapper/embedded methods still use n_features as a target.
+        self.p_value = p_value
         self.selected_features: Optional[np.ndarray] = None
         self.feature_scores: Optional[np.ndarray] = None
 
@@ -150,18 +154,50 @@ class FeatureSelector:
             raise ValueError("filter_ttest requires exactly 2 classes.")
         X0, X1 = X[y == classes[0]], X[y == classes[1]]
         _, p_values = ttest_ind(X1, X0, axis=0, equal_var=False)
-        order = np.argsort(p_values)
-        self.selected_features = order[: self.n_features]
+        # If a p-value threshold is provided, select all genes meeting it.
+        if self.p_value is not None:
+            mask = np.where(p_values <= float(self.p_value))[0]
+            if mask.size == 0:
+                logger.warning(
+                    "[filter_ttest] No features met p-value <= %s; falling back to top-%d selection",
+                    self.p_value,
+                    self.n_features,
+                )
+                order = np.argsort(p_values)
+                self.selected_features = order[: self.n_features]
+            else:
+                self.selected_features = np.sort(mask)
+        else:
+            order = np.argsort(p_values)
+            self.selected_features = order[: self.n_features]
         self.feature_scores = p_values
         logger.info(f"  → {len(self.selected_features)} features selected")
 
     def _fit_anova(self, X: np.ndarray, y: np.ndarray) -> None:
         logger.info("[filter_anova]  ANOVA F-Test …")
-        k = min(self.n_features, X.shape[1])
-        sel = SelectKBest(score_func=f_classif, k=k)
-        sel.fit(X, y)
-        self.selected_features = sel.get_support(indices=True)
-        self.feature_scores = sel.scores_
+        # Compute F-statistic and associated p-values
+        F, p_values = f_classif(X, y)
+        # If a p-value threshold is provided, select all genes meeting it.
+        if self.p_value is not None:
+            mask = np.where(p_values <= float(self.p_value))[0]
+            if mask.size == 0:
+                logger.warning(
+                    "[filter_anova] No features met p-value <= %s; falling back to top-%d selection",
+                    self.p_value,
+                    self.n_features,
+                )
+                k = min(self.n_features, X.shape[1])
+                sel = SelectKBest(score_func=f_classif, k=k)
+                sel.fit(X, y)
+                self.selected_features = sel.get_support(indices=True)
+            else:
+                self.selected_features = np.sort(mask)
+        else:
+            k = min(self.n_features, X.shape[1])
+            sel = SelectKBest(score_func=f_classif, k=k)
+            sel.fit(X, y)
+            self.selected_features = sel.get_support(indices=True)
+        self.feature_scores = F
         logger.info(f"  → {len(self.selected_features)} features selected")
 
     # ------------------------------------------------------------------
@@ -171,10 +207,35 @@ class FeatureSelector:
         self, X: np.ndarray, y: np.ndarray, max_k: int = 500
     ) -> tuple[np.ndarray, np.ndarray]:
         """Quick ANOVA pre-filter; returns (X_filtered, original_indices)."""
-        k = min(max_k, X.shape[1])
-        sel = SelectKBest(score_func=f_classif, k=k)
-        X_f = sel.fit_transform(X, y)
-        return X_f, sel.get_support(indices=True)
+        # If a p-value threshold is specified on the selector instance, prefer
+        # selecting by p-value (up to max_k). Otherwise fall back to top-k ANOVA.
+        if getattr(self, "p_value", None) is not None:
+            _, p_values = f_classif(X, y)
+            mask = np.where(p_values <= float(self.p_value))[0]
+            if mask.size == 0:
+                logger.warning(
+                    "[prefilter] No features met p-value <= %s; falling back to top-%d prefilter",
+                    self.p_value,
+                    max_k,
+                )
+                k = min(max_k, X.shape[1])
+                sel = SelectKBest(score_func=f_classif, k=k)
+                X_f = sel.fit_transform(X, y)
+                return X_f, sel.get_support(indices=True)
+            # Cap to max_k most significant by p-value
+            if mask.size > max_k:
+                ordered = np.argsort(p_values)
+                keep = ordered[:max_k]
+                X_f = X[:, keep]
+                return X_f, keep
+            else:
+                X_f = X[:, mask]
+                return X_f, mask
+        else:
+            k = min(max_k, X.shape[1])
+            sel = SelectKBest(score_func=f_classif, k=k)
+            X_f = sel.fit_transform(X, y)
+            return X_f, sel.get_support(indices=True)
 
     # ------------------------------------------------------------------
     # Wrapper methods
@@ -324,6 +385,7 @@ class FeatureSelectionPipeline:
         self,
         n_features: int = 20,
         methods: Optional[list[str]] = None,
+        p_value: Optional[float] = None,
     ) -> None:
         self.n_features = n_features
         chosen = methods or self.ALL_METHODS
@@ -333,8 +395,9 @@ class FeatureSelectionPipeline:
                 f"Unknown method(s): {unknown}. "
                 f"Valid choices: {self.ALL_METHODS}"
             )
+        self.p_value = p_value
         self.selectors: dict[str, FeatureSelector] = {
-            m: FeatureSelector(m, n_features) for m in chosen
+            m: FeatureSelector(m, n_features, p_value=p_value) for m in chosen
         }
 
     def fit_all(self, X: np.ndarray, y: np.ndarray) -> dict:
@@ -664,6 +727,17 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Number of features to select per method (default: 20)",
     )
     parser.add_argument(
+        "--p-value",
+        type=float,
+        default=None,
+        dest="p_value",
+        help=(
+            "P-value threshold for filter methods. If provided, filter methods "
+            "(t-test, ANOVA) will select all genes with p <= p-value instead of "
+            "selecting a fixed top-k. Default: None (use top-k selection)."
+        ),
+    )
+    parser.add_argument(
         "--methods", "-m",
         nargs="+",
         default=None,
@@ -743,6 +817,7 @@ def main() -> int:
     pipeline = FeatureSelectionPipeline(
         n_features=args.n_features,
         methods=args.methods,
+        p_value=args.p_value,
     )
     results = pipeline.fit_all(X.to_numpy(), y)
 

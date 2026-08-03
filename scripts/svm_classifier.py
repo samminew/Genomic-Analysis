@@ -88,10 +88,13 @@ class SVMClassifierWithCV:
         dataset_name: str = "GSE19804",
         n_splits: int = 5,
         random_state: int = 42,
+        p_value: Optional[float] = None,
     ) -> None:
         self.dataset_name = dataset_name
         self.n_splits = n_splits
         self.random_state = random_state
+        # Optional p-value threshold to pass to filter-based FeatureSelector
+        self.p_value = p_value
 
         self.base_dir = Path(__file__).resolve().parent.parent
 
@@ -248,7 +251,7 @@ class SVMClassifierWithCV:
     # ------------------------------------------------------------------
     # Path B — Optimised (LEAKAGE-FREE via sklearn Pipeline)
     # ------------------------------------------------------------------
-    def train_path_b_optimized(self, feature_method: str = "filter_ttest", n_features: int = 20) -> None:
+    def train_path_b_optimized(self, feature_method: str = "filter_ttest", n_features: int = 20, p_value: Optional[float] = None) -> None:
         """
         Evaluate SVM with feature selection applied strictly INSIDE each 
         training fold using sklearn.pipeline.Pipeline.
@@ -259,6 +262,9 @@ class SVMClassifierWithCV:
         logger.info("\n" + "=" * 70)
         logger.info(f"PATH B: OPTIMISED — Feature selection: {feature_method} (n={n_features})")
         logger.info("=" * 70)
+
+        # Determine p_value to use: method arg overrides the instance default
+        p_value = p_value if p_value is not None else getattr(self, "p_value", None)
 
         cv = StratifiedKFold(
             n_splits=self.n_splits, shuffle=True, random_state=self.random_state
@@ -276,7 +282,7 @@ class SVMClassifierWithCV:
             # CRITICAL: Pipeline ensures fit_transform happens ONLY on train data.
             # The test data is transformed using the parameters learned from the train data.
             pipeline = Pipeline([
-                ('selector', FeatureSelector(method=feature_method, n_features=n_features)),
+                ('selector', FeatureSelector(method=feature_method, n_features=n_features, p_value=p_value)),
                 ('svm', SVC(
                     kernel="linear", C=1.0,
                     random_state=self.random_state,
@@ -439,7 +445,7 @@ class SVMClassifierWithCV:
         # Derive method list from FeatureSelectionPipeline so it stays in sync
         for method in FeatureSelectionPipeline.ALL_METHODS:
             try:
-                self.train_path_b_optimized(feature_method=method)
+                self.train_path_b_optimized(feature_method=method, p_value=self.p_value)
             except Exception as exc:
                 logger.error(f"Path B ({method}) failed: {exc}")
 
