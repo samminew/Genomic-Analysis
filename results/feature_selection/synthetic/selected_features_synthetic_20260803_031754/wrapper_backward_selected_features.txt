@@ -1,0 +1,20 @@
+Feature Selection Method : Backward Elimination (Wrapper)
+Method Key               : wrapper_backward
+Dataset                  : synthetic
+Timestamp                : 20260803_031754
+Original Feature Space   : 100
+Features Selected        : 10
+Dimensionality Reduction : 90.00%
+============================================================
+Index      Feature Name
+------------------------------------------------------------
+90         G90
+91         G91
+92         G92
+93         G93
+94         G94
+95         G95
+96         G96
+97         G97
+98         G98
+99         G99

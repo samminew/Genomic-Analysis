@@ -1,0 +1,69 @@
+======================================================================
+FEATURE SELECTION EVALUATION REPORT
+======================================================================
+
+Dataset      : synthetic
+Timestamp    : 20260803_031754
+Samples      : 50
+Features     : 100
+Target n_feat: 10
+Class dist.  : 25 class-0 / 25 class-1
+
+======================================================================
+RESULTS BY METHOD
+======================================================================
+
+  Method  : Welch's T-Test (Filter)
+  Key     : filter_ttest
+  Selected: 10 / 100 features  (90.0% reduction)
+  Indices : [0, 1, 2, 3, 4, 9, 13, 52, 64, 70]
+  Names   : ['G0', 'G1', 'G2', 'G3', 'G4', 'G9', 'G13', 'G52', 'G64', 'G70']
+
+----------------------------------------------------------------------
+
+  Method  : ANOVA F-Test (Filter)
+  Key     : filter_anova
+  Selected: 10 / 100 features  (90.0% reduction)
+  Indices : [0, 1, 2, 3, 4, 9, 13, 52, 64, 70]
+  Names   : ['G0', 'G1', 'G2', 'G3', 'G4', 'G9', 'G13', 'G52', 'G64', 'G70']
+
+----------------------------------------------------------------------
+
+  Method  : SVM-RFE (Wrapper)
+  Key     : wrapper_svm
+  Selected: 10 / 100 features  (90.0% reduction)
+  Indices : [0, 3, 4, 91, 94, 95, 96, 97, 98, 99]
+  Names   : ['G0', 'G3', 'G4', 'G91', 'G94', 'G95', 'G96', 'G97', 'G98', 'G99']
+
+----------------------------------------------------------------------
+
+  Method  : RF-RFE (Wrapper)
+  Key     : wrapper_rf
+  ERROR   : module 'ast' has no attribute 'Num'
+
+----------------------------------------------------------------------
+
+  Method  : Forward Selection (Wrapper)
+  Key     : wrapper_forward
+  Selected: 10 / 100 features  (90.0% reduction)
+  Indices : [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+  Names   : ['G0', 'G1', 'G2', 'G3', 'G4', 'G5', 'G6', 'G7', 'G8', 'G9']
+
+----------------------------------------------------------------------
+
+  Method  : Backward Elimination (Wrapper)
+  Key     : wrapper_backward
+  Selected: 10 / 100 features  (90.0% reduction)
+  Indices : [90, 91, 92, 93, 94, 95, 96, 97, 98, 99]
+  Names   : ['G90', 'G91', 'G92', 'G93', 'G94', 'G95', 'G96', 'G97', 'G98', 'G99']
+
+----------------------------------------------------------------------
+
+  Method  : LASSO / L1 Logistic (Embedded)
+  Key     : embedded_lasso
+  Selected: 5 / 100 features  (95.0% reduction)
+  Indices : [0, 1, 2, 3, 4]
+  Names   : ['G0', 'G1', 'G2', 'G3', 'G4']
+
+----------------------------------------------------------------------
+

@@ -125,7 +125,9 @@ We trained a Logistic Regression model with L1 penalty:
 where:
 \begin{itemize}
     \item $\sigma(\cdot)$ is the sigmoid function
-    \item $\lambda$ is the regularization strength (set to $\lambda = 0.1$)
+     \item $\lambda$ is the regularization strength (tuned by cross-validation)
+\end{itemize}
+\textbf{Note:} In the implementation the L1 regularization strength is selected by cross-validation (LogisticRegressionCV) over a grid of inverse-regularization values `C`. Smaller `C` implies stronger regularization (i.e. larger $\lambda$). This avoids using a single fixed $\lambda$ value that may over-regularise the model.
     \item The $L_1$ penalty forces $\beta_j = 0$ for irrelevant genes
 \end{itemize}
 

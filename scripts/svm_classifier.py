@@ -38,6 +38,8 @@ from sklearn.metrics import (
 from sklearn.model_selection import StratifiedKFold
 from sklearn.pipeline import Pipeline
 from sklearn.svm import SVC
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 
 # Ensure sibling scripts are importable regardless of working directory
 current_dir = Path(__file__).resolve().parent
@@ -292,15 +294,27 @@ class SVMClassifierWithCV:
             ])
 
             # Fit the entire pipeline on the training fold
-            pipeline.fit(X_train.values, y_train)
-            
+            try:
+                pipeline.fit(X_train.values, y_train)
+            except Exception as exc:
+                logger.error(f"  Pipeline fit failed on fold {fold_num}: {exc}")
+                # Abort this method early; mark as failed
+                return
+
             # Extract the number of features actually selected (handles LASSO edge cases)
-            n_selected = len(pipeline.named_steps['selector'].selected_features)
+            try:
+                n_selected = len(pipeline.named_steps['selector'].selected_features)
+            except Exception:
+                n_selected = None
             logger.info(f"  Reduced to {n_selected} features for this fold")
 
             # Predict on the test fold (pipeline automatically applies the trained selector)
-            y_pred       = pipeline.predict(X_test.values)
-            y_pred_proba = pipeline.predict_proba(X_test.values)
+            try:
+                y_pred       = pipeline.predict(X_test.values)
+                y_pred_proba = pipeline.predict_proba(X_test.values)
+            except Exception as exc:
+                logger.error(f"  Pipeline predict failed on fold {fold_num}: {exc}")
+                return
 
             metrics = self.evaluate_predictions(y_test, y_pred, y_pred_proba)
             metrics["n_features"]     = n_selected
@@ -456,13 +470,73 @@ class SVMClassifierWithCV:
 # Entry point
 # ---------------------------------------------------------------------------
 def main() -> None:
+    import argparse
+
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s  %(levelname)-8s  %(message)s",
         datefmt="%H:%M:%S",
     )
-    classifier = SVMClassifierWithCV(dataset_name="GSE42568", n_splits=5)
-    classifier.run_full_pipeline()
+
+    parser = argparse.ArgumentParser(description="Run SVM classifier pipeline")
+    parser.add_argument("--dataset", "-d", default="GSE42568",
+                        help="Dataset name or path (default: GSE42568)")
+    parser.add_argument("--n-splits", type=int, default=5,
+                        help="Number of CV splits (default: 5)")
+    parser.add_argument("--method", "-m", default=None,
+                        help="Run a single Path B method (default: run all)")
+    parser.add_argument("--max-workers", type=int, default=1,
+                        help="Max parallel workers for Path B methods (default: 1 — no parallelism)")
+    parser.add_argument("--p-value", type=float, default=None,
+                        help="Optional p-value threshold to pass to selectors")
+    parser.add_argument("--n-features", type=int, default=20,
+                        help="Target n_features for selectors (default: 20)")
+    parser.add_argument("--run", choices=["path_a", "path_b", "all"],
+                        default="all", help="Which paths to run (default: all)")
+    args = parser.parse_args()
+
+    classifier = SVMClassifierWithCV(dataset_name=args.dataset, n_splits=args.n_splits, p_value=args.p_value)
+
+    if args.run in ("all", "path_a"):
+        classifier.train_path_a_baseline()
+
+    if args.run in ("all", "path_b"):
+        if args.method:
+            classifier.train_path_b_optimized(feature_method=args.method, n_features=args.n_features, p_value=args.p_value)
+        else:
+            methods = FeatureSelectionPipeline.ALL_METHODS
+            max_workers = max(1, args.max_workers)
+            if max_workers == 1:
+                for method in methods:
+                    try:
+                        classifier.train_path_b_optimized(feature_method=method, n_features=args.n_features, p_value=args.p_value)
+                    except Exception as exc:
+                        logger.error(f"Path B ({method}) failed during run: {exc}")
+            else:
+                # Parallel execution using ThreadPoolExecutor; protect shared results with a lock
+                lock = threading.Lock()
+                def _run_and_store(method_name: str):
+                    # Run training and return the key/summary for aggregation
+                    try:
+                        # Use the existing instance method which appends to self.results
+                        classifier.train_path_b_optimized(feature_method=method_name, n_features=args.n_features, p_value=args.p_value)
+                        return method_name, True, None
+                    except Exception as exc:
+                        return method_name, False, str(exc)
+
+                with ThreadPoolExecutor(max_workers=max_workers) as ex:
+                    futures = {ex.submit(_run_and_store, m): m for m in methods}
+                    for fut in as_completed(futures):
+                        method = futures[fut]
+                        try:
+                            mname, ok, err = fut.result()
+                            if not ok:
+                                logger.error(f"Parallel Path B method {mname} failed: {err}")
+                        except Exception as exc:
+                            logger.error(f"Parallel Path B method {method} exception: {exc}")
+
+    classifier.compare_paths()
+    classifier.save_results()
 
 if __name__ == "__main__":
     main()

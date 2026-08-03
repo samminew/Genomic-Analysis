@@ -1,0 +1,8 @@
+Method,Display Name,Features Selected,Original Features,Reduction (%),Selected Feature Indices,Selected Feature Names
+filter_ttest,Welch's T-Test (Filter),10,100,90.0,0;1;2;3;4;9;13;52;64;70,G0;G1;G2;G3;G4;G9;G13;G52;G64;G70
+filter_anova,ANOVA F-Test (Filter),10,100,90.0,0;1;2;3;4;9;13;52;64;70,G0;G1;G2;G3;G4;G9;G13;G52;G64;G70
+wrapper_svm,SVM-RFE (Wrapper),10,100,90.0,0;3;4;91;94;95;96;97;98;99,G0;G3;G4;G91;G94;G95;G96;G97;G98;G99
+wrapper_rf,RF-RFE (Wrapper),ERROR,100,,module 'ast' has no attribute 'Num',
+wrapper_forward,Forward Selection (Wrapper),10,100,90.0,0;1;2;3;4;5;6;7;8;9,G0;G1;G2;G3;G4;G5;G6;G7;G8;G9
+wrapper_backward,Backward Elimination (Wrapper),10,100,90.0,90;91;92;93;94;95;96;97;98;99,G90;G91;G92;G93;G94;G95;G96;G97;G98;G99
+embedded_lasso,LASSO / L1 Logistic (Embedded),5,100,95.0,0;1;2;3;4,G0;G1;G2;G3;G4

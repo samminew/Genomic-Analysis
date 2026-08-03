@@ -1,0 +1,6 @@
+Feature Selection Method : RF-RFE (Wrapper)
+Method Key               : wrapper_rf
+Dataset                  : synthetic
+Timestamp                : 20260803_031754
+Original Feature Space   : 100
+ERROR: module 'ast' has no attribute 'Num'

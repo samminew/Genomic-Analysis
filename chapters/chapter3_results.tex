@@ -23,8 +23,38 @@ Welch's T-Test successfully reduced the dataset from 54,675 to 20 features, a 10
     \begin{tabular}{ll|ll}
         \toprule
         \textbf{Rank} & \textbf{Gene ID} & \textbf{Rank} & \textbf{Gene ID} \\
-        \midrule
-        1 & 1557729\_at & 11 & 215918\_s\_at \\
+\subsection*{Prefiltering Policy}
+
+The pipeline uses ANOVA-based prefiltering to reduce the candidate feature
+space for wrapper methods. Behaviour by method:
+
+\begin{itemize}
+    \item \textbf{filter\_ttest / filter\_anova:} operate on the full feature
+        matrix (no prefilter) and select by p-value threshold or top-$k$.
+    \item \textbf{wrapper\_svm (SVM-RFE):} ANOVA prefilter to top-$M$ probes
+        (default $M=500$) or by p-value threshold within each training fold,
+        then RFE runs on the reduced set.
+    \item \textbf{wrapper\_rf (RF importance):} same ANOVA prefilter; RF is fit
+        on the prefiltered matrix and top-$k$ importances are returned. If RF
+        fitting fails, the method falls back to ANOVA top-$k$ on the same
+        prefiltered set.
+    \item \textbf{embedded\_lasso:} runs on the full matrix (no prefilter),
+        using cross-validated L1 logistic regression where possible.
+\end{itemize}
+
+\paragraph{Why prefilter some methods}
+Prefiltering reduces the candidate feature set before wrapper algorithms run
+for three practical reasons: it (1) keeps computational cost and memory use
+within practical bounds for high-dimensional microarray data; (2) reduces
+noise by removing features with weak univariate evidence, improving the
+stability of importance-based rankings; and (3) limits overfitting risk by
+restricting expensive multivariate searches to a small, higher-quality
+subset. Crucially, the prefilter is applied inside each training fold to avoid
+information leakage — the selection statistics are computed only on training
+data and never on held-out test folds.
+
+
+\section{Embedded Method Results}
         2 & 202524\_s\_at & 12 & 217046\_s\_at \\
         3 & 203435\_s\_at & 13 & 217177\_s\_at \\
         4 & 205107\_s\_at & 14 & 217771\_at \\
@@ -91,31 +121,16 @@ The Support Vector Machine-based Recursive Feature Elimination (SVM-RFE) isolate
     \vspace{-0.5cm}
 \end{table}
 
-\subsection{Forward Selection Selected Genes}
+\subsection{Greedy Wrapper Methods Removed}
 
-Due to an execution environment error with the RF-RFE module (AST numeric attribute conflict) [cite: 29], we utilized Forward Selection as the secondary Wrapper method, which successfully extracted 20 optimal genes[cite: 30].
-
-\begin{table}[H]
-    \centering
-    \caption{Top 20 genes selected by Forward Selection}
-    \begin{tabular}{ll|ll}
-        \toprule
-        \textbf{Rank} & \textbf{Gene ID} & \textbf{Rank} & \textbf{Gene ID} \\
-        \midrule
-        1 & 1007\_s\_at & 11 & 1438\_at \\
-        2 & 1053\_at & 12 & 1487\_at \\
-        3 & 117\_at & 13 & 1494\_f\_at \\
-        4 & 121\_at & 14 & 1552256\_a\_at \\
-        5 & 1255\_g\_at & 15 & 1552257\_a\_at \\
-        6 & 1294\_at & 16 & 1552258\_at \\
-        7 & 1316\_at & 17 & 1552261\_at \\
-        8 & 1320\_at & 18 & 1552263\_at \\
-        9 & 1405\_i\_at & 19 & 203435\_s\_at \\
-        10 & 1431\_at & 20 & 205107\_s\_at \\
-        \bottomrule
-    \end{tabular}
-    \vspace{-0.5cm}
-             \item \textbf{Target Features Selection:} 20 (default) or user-defined p-value threshold $\alpha$ for filter methods [cite: 26]
+Greedy forward and backward selection methods have been removed from the
+analysis pipeline and codebase. These in-fold greedy wrappers proved
+prohibitively expensive on high-dimensional genomic data (millions of model
+fits per cross-validation run) and produced unstable or poor predictive
+performance compared with faster alternatives (ANOVA pre-filtering, SVM-RFE,
+and cross-validated LASSO). For reproducibility and computational efficiency,
+the report omits detailed forward/backward tables and instead focuses on the
+practically viable methods retained in the project.
 
 \section{Embedded Method Results}
 
@@ -215,7 +230,6 @@ We evaluated classification performance using Support Vector Machine (SVM) with 
         Filter (Top 20 T-Test) & 0.9519 & 20 genes \\
         Wrapper (SVM-RFE) & 0.9519 & 20 genes \\
         Embedded (LASSO) & 0.9370 & 20 genes \\
-        Wrapper (Forward Selection) & 0.9416 & 20 genes \\
         \bottomrule
     \end{tabular}
 \end{table}
@@ -242,12 +256,11 @@ We evaluated classification performance using Support Vector Machine (SVM) with 
     \item \textbf{Limitation:} Methods are univariate; they miss gene-gene interactions
 \end{itemize}
 
-\subsubsection{Wrapper Methods (SVM-RFE and Forward Selection)}
+\subsubsection{Wrapper Methods (SVM-RFE)}
 
 \begin{itemize}
     \item \textbf{SVM-RFE Performance:} MCC = 0.9519 (tied for best)
-    \item \textbf{Forward Selection Performance:} MCC = 0.9416 (slightly lower)
-    \item \textbf{Computational Cost:} $O(p^2 \cdot n)$---significantly more expensive but still tractable
+    \item \textbf{Computational Cost:} Higher than filter methods; RFE benefits from pre-filtering to make wrapper evaluation tractable
     \item \textbf{Advantage:} Capture multivariate feature interactions; genes selected are tuned to specific model class
 \end{itemize}
 

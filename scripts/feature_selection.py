@@ -18,7 +18,7 @@ Arguments
 --n-features  Number of features to select per method (default: 20).
 --methods   Space-separated subset of methods to run (default: all).
             Choices: filter_ttest  filter_anova  wrapper_svm  wrapper_rf
-                     wrapper_forward  wrapper_backward  embedded_lasso
+                     embedded_lasso
 --results-dir  Directory to write results into.
             Default: <project_root>/results/feature_selection
 --no-feature-files  Skip writing per-method .txt feature lists.
@@ -63,7 +63,9 @@ import pandas as pd
 from scipy.stats import ttest_ind
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_selection import RFE, SelectKBest, f_classif
-from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
+from sklearn.base import BaseEstimator, TransformerMixin
+import matplotlib.pyplot as plt
 from sklearn.svm import LinearSVC
 
 logger = logging.getLogger(__name__)
@@ -72,7 +74,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # FeatureSelector
 # ---------------------------------------------------------------------------
-class FeatureSelector:
+class FeatureSelector(BaseEstimator, TransformerMixin):
     """
     Unified feature selection interface.
 
@@ -89,21 +91,31 @@ class FeatureSelector:
         "filter_ttest":     "Welch's T-Test (Filter)",
         "filter_anova":     "ANOVA F-Test (Filter)",
         "wrapper_svm":      "SVM-RFE (Wrapper)",
-        "wrapper_rf":       "RF-RFE (Wrapper)",
-        "wrapper_forward":  "Forward Selection (Wrapper)",
-        "wrapper_backward": "Backward Elimination (Wrapper)",
+        "wrapper_rf":       "RandomForest Importance (Wrapper)",
         "embedded_lasso":   "LASSO / L1 Logistic (Embedded)",
     }
 
-    def __init__(self, method: str = "filter_ttest", n_features: int = 20, p_value: Optional[float] = None) -> None:
+    def __init__(
+        self,
+        method: str = "filter_ttest",
+        n_features: int = 20,
+        p_value: Optional[float] = None,
+        lasso_Cs: Optional[list[float]] = None,
+        lasso_scoring: str = "roc_auc",
+    ) -> None:
         self.method = method
         self.n_features = n_features
         # If p_value is provided, filter-based methods will select features
         # whose p-values are <= p_value instead of selecting a fixed top-k.
         # Wrapper/embedded methods still use n_features as a target.
         self.p_value = p_value
+        # LASSO cross-validation grid and scoring metric
+        self.lasso_Cs = np.array(lasso_Cs) if lasso_Cs is not None else None
+        self.lasso_scoring = lasso_scoring
         self.selected_features: Optional[np.ndarray] = None
         self.feature_scores: Optional[np.ndarray] = None
+        # Diagnostic results for embedded LASSO CV (filled after fit)
+        self.lasso_cv_results: dict | None = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -118,8 +130,6 @@ class FeatureSelector:
             "filter_anova":     self._fit_anova,
             "wrapper_svm":      self._fit_wrapper_svm,
             "wrapper_rf":       self._fit_wrapper_rf,
-            "wrapper_forward":  self._fit_forward_selection,
-            "wrapper_backward": self._fit_backward_elimination,
             "embedded_lasso":   self._fit_embedded_lasso,
         }
         if self.method not in dispatch:
@@ -258,111 +268,112 @@ class FeatureSelector:
         logger.info(f"  → {len(self.selected_features)} features selected")
 
     def _fit_wrapper_rf(self, X: np.ndarray, y: np.ndarray) -> None:
-        logger.info("[wrapper_rf]  RF-RFE (with ANOVA pre-filter) …")
+        logger.info("[wrapper_rf]  RandomForest importance prefilter (with ANOVA pre-filter) …")
         X_pre, pre_idx = self._prefilter(X, y)
-        logger.info(f"  Pre-filtered to {X_pre.shape[1]} features, running RFE …")
+        logger.info(f"  Pre-filtered to {X_pre.shape[1]} features, fitting RandomForest …")
         rf = RandomForestClassifier(
-            n_estimators=100, random_state=42,
+            n_estimators=200, random_state=42,
             n_jobs=-1, class_weight="balanced",
         )
-        rfe = RFE(
-            estimator=rf,
-            n_features_to_select=min(self.n_features, X_pre.shape[1]),
-            step=10,
-        )
-        rfe.fit(X_pre, y)
-        self.selected_features = pre_idx[rfe.support_]
-        logger.info(f"  → {len(self.selected_features)} features selected")
+        try:
+            rf.fit(X_pre, y)
+            importances = rf.feature_importances_
+            # Select top-n by importance (cap to available features)
+            k = min(self.n_features, X_pre.shape[1])
+            order = np.argsort(importances)[-k:]
+            selected_orig_idx = pre_idx[order]
+            # keep them sorted for downstream reproducibility
+            self.selected_features = np.sort(selected_orig_idx)
+            self.feature_scores = importances
+            logger.info(f"  → {len(self.selected_features)} features selected (top-{k} by RF importance)")
+        except Exception as exc:
+            logger.warning(f"  RandomForest fit failed ({exc}); falling back to ANOVA top-k prefilter")
+            # Fall back to SelectKBest on the prefiltered matrix (ANOVA F-test)
+            k = min(self.n_features, X_pre.shape[1])
+            sel = SelectKBest(score_func=f_classif, k=k)
+            sel.fit(X_pre, y)
+            keep = sel.get_support(indices=True)
+            self.selected_features = np.sort(pre_idx[keep])
+            # store F-scores as feature_scores when RF importances unavailable
+            F, _ = f_classif(X_pre, y)
+            self.feature_scores = F
+            logger.info(f"  → {len(self.selected_features)} features selected (top-{k} by ANOVA fallback)")
 
-    def _fit_forward_selection(self, X: np.ndarray, y: np.ndarray) -> None:
-        logger.info("[wrapper_forward]  Greedy Forward Selection …")
-        _, n_total = X.shape
-        selected: list[int] = []
-        remaining = set(range(n_total))
-        svc = LinearSVC(
-            C=0.01, penalty="l1", dual=False,
-            max_iter=2000, random_state=42, class_weight="balanced",
-        )
-        target = min(self.n_features, n_total)
-        for step in range(target):
-            best_feat, best_score = None, -np.inf
-            for feat in remaining:
-                X_cand = X[:, selected + [feat]]
-                try:
-                    svc.fit(X_cand, y)
-                    score = svc.score(X_cand, y)
-                    if score > best_score:
-                        best_score, best_feat = score, feat
-                except Exception:
-                    continue
-            if best_feat is None:
-                logger.warning(f"  Step {step + 1}: no valid feature found, stopping.")
-                break
-            selected.append(best_feat)
-            remaining.discard(best_feat)
-            logger.info(
-                f"  Step {step + 1}/{target}: added feature {best_feat}"
-                f"  (acc={best_score:.4f})"
-            )
-        self.selected_features = np.array(selected)
-        logger.info(f"  → {len(self.selected_features)} features selected")
-
-    def _fit_backward_elimination(self, X: np.ndarray, y: np.ndarray) -> None:
-        logger.info("[wrapper_backward]  Backward Elimination (with ANOVA pre-filter) …")
-        X_pre, pre_idx = self._prefilter(X, y)
-        selected = list(range(X_pre.shape[1]))
-        target = min(self.n_features, X_pre.shape[1])
-        svc = LinearSVC(
-            C=0.01, penalty="l1", dual=False,
-            max_iter=2000, random_state=42, class_weight="balanced",
-        )
-        logger.info(
-            f"  Pre-filtered to {len(selected)} features, "
-            f"eliminating down to {target} …"
-        )
-        while len(selected) > target:
-            worst_idx, worst_score = None, np.inf
-            for i in range(len(selected)):
-                X_cand = X_pre[:, [f for j, f in enumerate(selected) if j != i]]
-                try:
-                    svc.fit(X_cand, y)
-                    score = svc.score(X_cand, y)
-                    if score < worst_score:
-                        worst_score, worst_idx = score, i
-                except Exception:
-                    continue
-            if worst_idx is None:
-                logger.warning("  Could not find a feature to remove, stopping.")
-                break
-            removed = selected.pop(worst_idx)
-            logger.info(
-                f"  Removed feature {removed}  "
-                f"(acc={worst_score:.4f}, remaining={len(selected)})"
-            )
-        self.selected_features = pre_idx[np.array(selected)]
-        logger.info(f"  → {len(self.selected_features)} features selected")
+    # Note: greedy forward/backward wrapper methods removed — they were
+    # computationally prohibitive on high-dimensional genomic data and
+    # have been replaced by pre-filtered RFE and RF importance strategies.
 
     # ------------------------------------------------------------------
     # Embedded methods
     # ------------------------------------------------------------------
     def _fit_embedded_lasso(self, X: np.ndarray, y: np.ndarray) -> None:
         logger.info("[embedded_lasso]  LASSO (L1 Logistic Regression) …")
-        lasso = LogisticRegression(
-            penalty="l1", solver="liblinear",
-            C=0.1, random_state=42, max_iter=1000, class_weight="balanced",
-        )
-        lasso.fit(X, y)
-        coefs = np.abs(lasso.coef_[0])
-        non_zero = np.where(coefs > 0)[0]
-        if len(non_zero) <= self.n_features:
+        # Use cross-validated LogisticRegressionCV to pick regularization strength
+        # Cs is a grid of inverse regularization strengths; smaller C -> stronger regularization
+        Cs = self.lasso_Cs if self.lasso_Cs is not None else np.logspace(-4, 2, 20)
+        try:
+            lrcv = LogisticRegressionCV(
+                Cs=Cs,
+                penalty="l1",
+                solver="saga",
+                scoring=self.lasso_scoring,
+                cv=5,
+                class_weight="balanced",
+                random_state=42,
+                max_iter=2000,
+                n_jobs=-1,
+                refit=True,
+            )
+            lrcv.fit(X, y)
+            coefs = np.abs(lrcv.coef_[0])
+            # Report chosen C (inverse reg strength) — note that lambda ~ 1/C
+            try:
+                chosen_C = lrcv.C_[0]
+            except Exception:
+                chosen_C = getattr(lrcv, "C_", None)
+            logger.info(f"  LogisticRegressionCV selected C={chosen_C}")
+            # Compute diagnostic: number of non-zero coefficients for each C
+            non_zero_counts = []
+            for c in Cs:
+                try:
+                    lr = LogisticRegression(
+                        penalty="l1", solver="saga", C=float(c),
+                        class_weight="balanced", max_iter=2000, random_state=42
+                    )
+                    lr.fit(X, y)
+                    non_zero_counts.append(int((np.abs(lr.coef_[0]) > 1e-8).sum()))
+                except Exception:
+                    non_zero_counts.append(None)
+            self.lasso_cv_results = {
+                "Cs": Cs.tolist(),
+                "non_zero_counts": non_zero_counts,
+                "chosen_C": float(chosen_C) if chosen_C is not None else None,
+            }
+        except Exception as exc:
+            logger.warning(f"  LogisticRegressionCV failed ({exc}); falling back to fixed-C LASSO")
+            lasso = LogisticRegression(
+                penalty="l1", solver="liblinear",
+                C=0.1, random_state=42, max_iter=1000, class_weight="balanced",
+            )
+            lasso.fit(X, y)
+            coefs = np.abs(lasso.coef_[0])
+
+        non_zero = np.where(coefs > 1e-8)[0]
+        if len(non_zero) == 0:
             logger.warning(
-                f"  LASSO found only {len(non_zero)} non-zero coefficients "
-                f"(target was {self.n_features}); keeping all non-zero."
+                f"  LASSO produced no non-zero coefficients; falling back to top-{self.n_features} by coefficient magnitude"
+            )
+            top = np.argsort(coefs)[-self.n_features:]
+            self.selected_features = np.sort(top)
+        elif len(non_zero) <= self.n_features:
+            logger.info(
+                f"  LASSO found {len(non_zero)} non-zero coefficients (target was {self.n_features}); keeping all non-zero."
             )
             self.selected_features = non_zero
         else:
             top = np.argsort(coefs)[-self.n_features:]
             self.selected_features = np.sort(top)
+
         self.feature_scores = coefs
         logger.info(f"  → {len(self.selected_features)} features selected")
 
@@ -386,6 +397,8 @@ class FeatureSelectionPipeline:
         n_features: int = 20,
         methods: Optional[list[str]] = None,
         p_value: Optional[float] = None,
+        lasso_Cs: Optional[list[float]] = None,
+        lasso_scoring: str = "roc_auc",
     ) -> None:
         self.n_features = n_features
         chosen = methods or self.ALL_METHODS
@@ -396,8 +409,11 @@ class FeatureSelectionPipeline:
                 f"Valid choices: {self.ALL_METHODS}"
             )
         self.p_value = p_value
+        self.lasso_Cs = lasso_Cs
+        self.lasso_scoring = lasso_scoring
         self.selectors: dict[str, FeatureSelector] = {
-            m: FeatureSelector(m, n_features, p_value=p_value) for m in chosen
+            m: FeatureSelector(m, n_features, p_value=p_value, lasso_Cs=lasso_Cs, lasso_scoring=lasso_scoring)
+            for m in chosen
         }
 
     def fit_all(self, X: np.ndarray, y: np.ndarray) -> dict:
@@ -694,6 +710,29 @@ def save_results(
                     fh.write(f"ERROR: {results[method].get('error', 'unknown')}\n")
         print(f"  ✓  Per-method .txt files →  {feat_dir.name}/")
 
+    # ------------------------------------------------------------------
+    # 5. LASSO diagnostic plot (if available)
+    # ------------------------------------------------------------------
+    for method, selector in pipeline.selectors.items():
+        if method == "embedded_lasso" and getattr(selector, "lasso_cv_results", None) is not None:
+            diagnostics = selector.lasso_cv_results
+            try:
+                Cs = diagnostics["Cs"]
+                counts = diagnostics["non_zero_counts"]
+                plt.figure()
+                plt.plot(Cs, counts, marker="o")
+                plt.xscale("log")
+                plt.xlabel("C (inverse regularization)")
+                plt.ylabel("Number of non-zero coefficients")
+                plt.title(f"LASSO: Non-zero coefficients vs C ({dataset_name})")
+                plt.grid(True)
+                plot_path = out_dir / f"lasso_nonzero_vs_C_{dataset_name}_{ts}.png"
+                plt.savefig(plot_path, bbox_inches="tight")
+                plt.close()
+                print(f"  ✓  LASSO diagnostic plot →  {plot_path.name}")
+            except Exception as exc:
+                print(f"  !  Could not create LASSO diagnostic plot: {exc}")
+
     return out_dir
 
 
@@ -736,6 +775,23 @@ def _build_parser() -> argparse.ArgumentParser:
             "(t-test, ANOVA) will select all genes with p <= p-value instead of "
             "selecting a fixed top-k. Default: None (use top-k selection)."
         ),
+    )
+    parser.add_argument(
+        "--lasso-cs",
+        type=str,
+        default=None,
+        dest="lasso_cs",
+        help=(
+            "Comma-separated list of C values for LASSO CV (e.g. '1e-4,1e-3,1e-2'). "
+            "If omitted, a logspace grid is used."
+        ),
+    )
+    parser.add_argument(
+        "--lasso-scoring",
+        type=str,
+        default="roc_auc",
+        dest="lasso_scoring",
+        help="Scoring metric for LASSO CV (default: 'roc_auc')",
     )
     parser.add_argument(
         "--methods", "-m",
@@ -814,10 +870,20 @@ def main() -> int:
     print(f"  Output dir : {results_base_dir / dataset_name}")
     print("=" * 65 + "\n")
 
+    # Parse lasso Cs if provided
+    lasso_Cs = None
+    if args.lasso_cs:
+        try:
+            lasso_Cs = [float(x) for x in args.lasso_cs.split(",") if x.strip()]
+        except Exception:
+            logger.warning("Could not parse --lasso-cs; falling back to default grid")
+
     pipeline = FeatureSelectionPipeline(
         n_features=args.n_features,
         methods=args.methods,
         p_value=args.p_value,
+        lasso_Cs=lasso_Cs,
+        lasso_scoring=args.lasso_scoring,
     )
     results = pipeline.fit_all(X.to_numpy(), y)
 

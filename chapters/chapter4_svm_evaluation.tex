@@ -194,73 +194,15 @@ The high MCC standard deviation (0.2378) reflects fold sensitivity, but the
 tight precision standard deviation (0.0287) shows consistent positive predictive
 value across folds.
 
-\subsection{Wrapper Method: Greedy Forward Selection}
-\label{subsec:forward}
+\subsection{Greedy Wrapper Methods Removed}
 
-\begin{table}[H]
-    \centering
-    \caption{SVM with Wrapper (Forward Selection, $k=20$) -- Results}
-    \label{tab:forward}
-    \begin{tabular}{lcccccc}
-        \toprule
-        \textbf{Fold} & \textbf{Acc.} & \textbf{Prec.} & \textbf{Recall}
-                      & \textbf{F1} & \textbf{MCC} & \textbf{ROC-AUC} \\
-        \midrule
-        1 & 0.7600 & -- & 0.7505 & 0.8421 & 0.4023 & -- \\
-        2 & 0.6667 & -- & -- & 0.8000 & $-$0.1939 & -- \\
-        3 & 0.6250 & -- & -- & 0.7692 & $-$0.2182 & -- \\
-        4 & 0.6667 & -- & -- & 0.7895 & 0.0346 & -- \\
-        5 & 0.6667 & -- & -- & 0.8000 & $-$0.2000 & -- \\
-        \midrule
-        \textbf{Mean} & \textbf{0.6770} & \textbf{0.8598} & \textbf{0.7505}
-                      & \textbf{0.8002} & $-$\textbf{0.0350} & \textbf{0.4303} \\
-        \textbf{Std}  & 0.0498 & 0.0541 & 0.0365
-                      & 0.0266 & 0.2656 & 0.1654 \\
-        \bottomrule
-    \end{tabular}
-\end{table}
-
-\paragraph{Analysis:}
-Forward selection achieved 67.70\% mean accuracy and a mean MCC of $-$0.035,
-placing it among the weakest methods on this dataset.  The ROC-AUC of 0.4303
-is below random chance, indicating poor threshold-averaged discrimination.
-These results are, however, secondary to the critical computational issue
-documented in Section~\ref{sec:forward_complexity}.
-
-\subsection{Wrapper Method: Backward Elimination}
-
-\begin{table}[H]
-    \centering
-    \caption{SVM with Wrapper (Backward Elimination, $k=20$) -- Results}
-    \label{tab:backward}
-    \begin{tabular}{lcccccc}
-        \toprule
-        \textbf{Fold} & \textbf{Acc.} & \textbf{Prec.} & \textbf{Recall}
-                      & \textbf{F1} & \textbf{MCC} & \textbf{ROC-AUC} \\
-        \midrule
-        1 & 0.7200 & -- & 0.8543 & 0.8293 & 0.0546 & -- \\
-        2 & 0.8333 & -- & -- & 0.9048 & 0.2381 & -- \\
-        3 & 0.8750 & -- & -- & 0.9302 & 0.3419 & -- \\
-        4 & 0.7917 & -- & -- & 0.8837 & $-$0.1140 & -- \\
-        5 & 0.6250 & -- & -- & 0.7568 & $-$0.0410 & -- \\
-        \midrule
-        \textbf{Mean} & \textbf{0.7690} & \textbf{0.8702} & \textbf{0.8543}
-                      & \textbf{0.8609} & \textbf{0.0959} & \textbf{0.5283} \\
-        \textbf{Std}  & 0.0988 & 0.0365 & 0.1007
-                      & 0.0691 & 0.1905 & 0.1103 \\
-        \bottomrule
-    \end{tabular}
-\end{table}
-
-\paragraph{Analysis:}
-Backward elimination achieves a comparable mean accuracy (76.90\%) and F1-Score
-(0.8609) to SVM-RFE, and the highest mean MCC among the wrapper methods
-(0.0959).  Folds 2 and 3 produce particularly strong results (MCC 0.24 and
-0.34 respectively).  However, its practical utility is severely limited by its
-computational cost, detailed in Section~\ref{sec:forward_complexity}, and by
-the observation (Section~4 of the feature selection report) that backward
-elimination on the 500-feature pre-filtered pool tends to converge on
-unannotated late-array probes rather than biologically validated genes.
+Greedy forward and backward selection methods were removed from the analysis
+pipeline and codebase. They required orders of magnitude more model fits than
+other approaches (forward selection incurred millions of SVM fits per run) and
+delivered unstable or inferior predictive performance on high-dimensional
+genomic data. The report therefore focuses on the retained, practical methods
+(ANOVA pre-filtering, SVM-RFE with pre-filtering, and cross-validated LASSO),
+which give better computational and predictive trade-offs for this project.
 
 \subsection{Embedded Method: LASSO / L1 Logistic Regression}
 
@@ -340,6 +282,67 @@ metrics reported in the experimental output.
         \bottomrule
     \end{tabular}
 \end{table}
+\end{table}
+
+\subsection*{Prefiltering Policy (summary)}
+
+The wrapper methods used by the pipeline do not run on the full 54{,}675
+probe space directly. Instead, an ANOVA-based prefilter is applied inside
+each training fold to reduce the candidate pool before any wrapper algorithm
+executes. The policy is:
+
+\begin{itemize}
+    \item Compute ANOVA F-scores and p-values on the training fold.
+    \item If a p-value threshold $\alpha$ is supplied, retain features with
+        p~$\leq \alpha$; otherwise retain the top-$M$ probes by F-score.
+    \item The default cap is $M=500$; wrapper algorithms operate on this
+        prefiltered subset to keep runtime and memory within practical bounds.
+\end{itemize}
+
+This prefiltering is used by SVM-RFE and the RandomForest-importance selector
+and is explicitly documented in the methods' descriptions earlier in this chapter.
+
+\paragraph{Why we prefilter}
+The prefilter step is intentionally conservative and serves three goals: (1)
+it makes wrapper methods computationally tractable on tens of thousands of
+probes, (2) it improves the robustness of importance/ranking estimates by
+removing features with weak univariate signal, and (3) it reduces the risk of
+overfitting during multivariate wrapper searches. To preserve honest
+evaluation, the ANOVA prefilter is computed using only training-fold data so
+that no information from held-out test folds influences the candidate pool.
+ 
+\paragraph{Parallel execution note}
+The `svm_classifier` script offers an optional parallel mode for Path B
+evaluations (via the `--max-workers` flag). Parallelising methods reduces
+wall-clock time when multiple CPU cores are available but may change the
+ordering and timing of randomised steps (e.g. RF training). For reproducible
+results, set `--max-workers 1` (the default) or fix the random seed across
+runs. Logs and per-method results are still written to the same results
+directory so parallel runs produce the same artifacts — errors are reported
+per-method in the main log.
+\subsection*{Prefiltering: runtime estimate}
+
+The number of SVM fits required by greedy RFE per cross-validation fold can be
+written as
+$$
+\text{Models per fold} = \sum_{i=0}^{k-1}(N - i) = kN - \frac{k(k-1)}{2},
+$$
+where $N$ is the number of candidate features and $k$ the target subset size.
+For the full microarray ($N=54{,}675$) and $k=20$ this yields
+$$
+\text{Models}_{\text{full}} = 20\times54{,}675 - \frac{20\times19}{2} = 1,093,410.
+$$
+With a conservative ANOVA prefilter capped at $M=500$ the same calculation
+gives
+$$
+\text{Models}_{\text{prefilter}} = 20\times500 - \frac{20\times19}{2} = 9,810.
+$$
+Thus the prefilter reduces the number of model fits by a factor of
+approximately $1{,}093{,}410 / 9{,}810 \approx 111.5$ (over two orders of
+magnitude). Even if the per-fit time is small, this reduction makes wrapper
+searches feasible on commodity hardware; measured wall-clock speedups depend
+on implementation details and the chosen estimator but the model-fit count
+provides a reliable worst-case scaling estimate.
 
 %---------------------------------------------------------------------------
 \section{The Computational Cost of Greedy Forward Selection}
