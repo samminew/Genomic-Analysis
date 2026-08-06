@@ -103,10 +103,10 @@ Greedy forward/backward wrapper selection was removed for computational tractabi
 
 | Dataset | Filter methods | Wrapper / LASSO | Notes |
 |---------|----------------|-----------------|-------|
-| GSE19804 | ~19,505 / ~19,540 features | 20 features each | Filters run with `--p-value 0.05` |
-| GSE42568 | 20 features each | 20 features each | Default top-*k* (no `--p-value`) |
+| GSE19804 | 20 features each | 20 features each | Standardized `--n-features 20 --p-value 0.05` |
+| GSE42568 | 20 features each | 20 features each | Standardized `--n-features 20 --p-value 0.05` |
 
-> **Note:** The two datasets currently use different filter selection rules. For a fair cross-method comparison, rerun both with the same settings before final thesis submission.
+> **Note:** Both datasets are evaluated under identical selection parameters ($p \le 0.05, k = 20$), providing a direct cross-dataset and cross-method comparison.
 
 ### SVM settings
 

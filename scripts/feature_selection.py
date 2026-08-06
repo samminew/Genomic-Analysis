@@ -619,7 +619,7 @@ def save_results(
 
     csv_path = out_dir / f"feature_selection_summary_{dataset_name}_{ts}.csv"
     pd.DataFrame(csv_rows).to_csv(csv_path, index=False)
-    print(f"  ✓  CSV summary          →  {csv_path.name}")
+    print(f"  [OK] CSV summary          ->  {csv_path.name}")
 
     # ------------------------------------------------------------------
     # 2. JSON results
@@ -656,7 +656,7 @@ def save_results(
     json_path = out_dir / f"feature_selection_results_{dataset_name}_{ts}.json"
     with open(json_path, "w") as fh:
         json.dump(json_data, fh, indent=2)
-    print(f"  ✓  JSON results         →  {json_path.name}")
+    print(f"  [OK] JSON results         ->  {json_path.name}")
 
     # ------------------------------------------------------------------
     # 3. Text report
@@ -692,7 +692,7 @@ def save_results(
             else:
                 fh.write(f"  ERROR   : {results[method].get('error', '?')}\n")
             fh.write("\n" + "-" * 70 + "\n\n")
-    print(f"  ✓  Text report          →  {report_path.name}")
+    print(f"  [OK] Text report          ->  {report_path.name}")
 
     # ------------------------------------------------------------------
     # 4. Per-method feature list files
@@ -721,7 +721,7 @@ def save_results(
                         fh.write(f"{i:<10} {name}\n")
                 else:
                     fh.write(f"ERROR: {results[method].get('error', 'unknown')}\n")
-        print(f"  ✓  Per-method .txt files →  {feat_dir.name}/")
+        print(f"  [OK] Per-method .txt files ->  {feat_dir.name}/")
 
     # ------------------------------------------------------------------
     # 5. LASSO diagnostic plot (if available)

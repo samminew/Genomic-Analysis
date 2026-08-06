@@ -49,13 +49,11 @@ For each probe $j$, we computed the Welch $t$-statistic comparing cancer and nor
 
 where $\bar{x}_{c,j}$ and $\bar{x}_{n,j}$ denote the sample means in the cancer and normal groups, and $n_c$ and $n_n$ are the corresponding sample sizes. The resulting $p$-values were used to rank probes.
 
-\textbf{Selection rule:} if a p-value threshold $\alpha$ is supplied, all probes with $p \leq \alpha$ are retained; otherwise the method selects the top-$k$ probes by rank.
-
-For the feature-selection runs completed so far, the CLI was invoked without an explicit $\alpha$ value for the filter methods. The outputs therefore reflect the default compact top-$k$ behavior (target size 20) rather than a threshold-driven subset. Once a suitable p-value threshold has been chosen, the same workflow should be rerun with the corresponding CLI argument to obtain the broader p-value-based selections.
+\textbf{Selection rule:} To standardize subset size while ensuring statistical significance, the filter methods combine $p$-value filtering with a top-$k$ cap ($k=20$). Probes are first filtered to retain only those with $p \leq \alpha$ ($\alpha = 0.05$). If more than $k$ probes satisfy this threshold, they are ranked by significance ($p$-value ascending or $F$-statistic descending) and capped at the top $k=20$ probes. This ensures that all feature selection methods (filter, wrapper, and embedded) yield consistent, directly comparable $k=20$ feature subsets.
 
 \subsubsection{ANOVA F-Test}
 
-The ANOVA F-test evaluates whether the between-group variance exceeds the within-group variance for each probe. Probes with larger F-scores and smaller associated $p$-values are treated as more discriminative. As with the t-test, the implementation supports either selection by p-value threshold or selection of the top-$k$ features. The same caveat applies here: the runs completed so far did not pass a p-value cutoff to the CLI, so they used the default top-$k$ selection mode.
+The ANOVA F-test evaluates whether the between-group variance exceeds the within-group variance for each probe. Probes with larger F-scores and smaller associated $p$-values are treated as more discriminative. As with Welch's $t$-test, the ANOVA filter applies the combined $p \leq 0.05$ significance constraint and top-$k=20$ ranking rule.
 
 \subsection{Wrapper Methods}
 

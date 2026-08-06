@@ -42,7 +42,11 @@ def test_path_b_filter_ttest_one_fold():
 
 def test_selector_reports_pvalue_selection_rule():
     selector = FeatureSelector(method='filter_ttest', n_features=5, p_value=0.05)
-    assert selector.selection_rule == 'p_value<=0.05'
+    df = pd.read_csv('tests/synthetic.csv', index_col=0)
+    y = df['label'].to_numpy(dtype=int)
+    X = df.drop(columns=['label']).to_numpy()
+    selector.fit(X, y)
+    assert 'p<=0.05' in selector.selection_rule
 
 
 def test_wrapper_rf_fallback_returns_features():

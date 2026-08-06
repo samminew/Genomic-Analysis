@@ -97,8 +97,8 @@ def print_final_summary(results_summary: dict) -> None:
     print("COMPREHENSIVE ANALYSIS COMPLETE")
     print("=" * 80)
     print(f"\nResults summary:")
-    print(f"  ✓ Completed : {completed}/{total}")
-    print(f"  ✗ Failed    : {failed}/{total}")
+    print(f"  [OK] Completed : {completed}/{total}")
+    print(f"  [FAIL] Failed   : {failed}/{total}")
     print("\nDataset-by-dataset:\n")
 
     for name, info in results_summary.items():
@@ -117,7 +117,7 @@ def print_final_summary(results_summary: dict) -> None:
     print("Output locations:")
     for info in results_summary.values():
         if info["status"] == "COMPLETED":
-            print(f"  • {info['results_dir']}")
+            print(f"  * {info['results_dir']}")
     print("=" * 80 + "\n")
 
 
@@ -153,10 +153,10 @@ def main(n_splits: int = 5, random_state: int = 42) -> None:
                 "cancer_type": meta["cancer_type"],
                 "config":      config,
             }
-            logger.info(f"\n✓ {dataset_name} completed — results at: {classifier.results_dir}\n")
+            logger.info(f"\n[OK] {dataset_name} completed -- results at: {classifier.results_dir}\n")
 
         except Exception as exc:
-            logger.error(f"✗ {dataset_name} FAILED: {exc}\n")
+            logger.error(f"[FAIL] {dataset_name} FAILED: {exc}\n")
             results_summary[dataset_name] = {
                 "status":      "FAILED",
                 "error":       str(exc),

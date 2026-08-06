@@ -1,0 +1,30 @@
+Feature Selection Method : RandomForest Importance (Wrapper)
+Method Key               : wrapper_rf
+Dataset                  : GSE42568
+Timestamp                : 20260806_142521
+Original Feature Space   : 54675
+Features Selected        : 20
+Dimensionality Reduction : 99.96%
+============================================================
+Index      Feature Name
+------------------------------------------------------------
+228        1552582_at
+1821       1554776_at
+2190       1555265_at
+4776       1559421_at
+7579       1564334_at
+19663      210263_at
+20579      211220_s_at
+25031      215738_at
+29608      220324_at
+30657      221374_at
+42622      233371_at
+43165      233915_at
+44202      234953_x_at
+45802      236553_at
+50195      240946_at
+50271      241022_at
+52804      243555_at
+53287      244037_at
+53595      244345_at
+54082      244832_at
