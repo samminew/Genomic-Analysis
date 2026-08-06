@@ -90,11 +90,13 @@ class SVMClassifierWithCV:
         dataset_name: str = "GSE19804",
         n_splits: int = 5,
         random_state: int = 42,
-        p_value: Optional[float] = None,
+        n_features: int = 20,
+        p_value: Optional[float] = 0.05,
     ) -> None:
         self.dataset_name = dataset_name
         self.n_splits = n_splits
         self.random_state = random_state
+        self.n_features = n_features
         # Optional p-value threshold to pass to filter-based FeatureSelector
         self.p_value = p_value
 
@@ -459,7 +461,7 @@ class SVMClassifierWithCV:
         # Derive method list from FeatureSelectionPipeline so it stays in sync
         for method in FeatureSelectionPipeline.ALL_METHODS:
             try:
-                self.train_path_b_optimized(feature_method=method, p_value=self.p_value)
+                self.train_path_b_optimized(feature_method=method, n_features=self.n_features, p_value=self.p_value)
             except Exception as exc:
                 logger.error(f"Path B ({method}) failed: {exc}")
 
@@ -487,15 +489,15 @@ def main() -> None:
                         help="Run a single Path B method (default: run all)")
     parser.add_argument("--max-workers", type=int, default=1,
                         help="Max parallel workers for Path B methods (default: 1 — no parallelism)")
-    parser.add_argument("--p-value", type=float, default=None,
-                        help="Optional p-value threshold to pass to selectors")
+    parser.add_argument("--p-value", type=float, default=0.05,
+                        help="Optional p-value threshold to pass to selectors (default: 0.05)")
     parser.add_argument("--n-features", type=int, default=20,
                         help="Target n_features for selectors (default: 20)")
     parser.add_argument("--run", choices=["path_a", "path_b", "all"],
                         default="all", help="Which paths to run (default: all)")
     args = parser.parse_args()
 
-    classifier = SVMClassifierWithCV(dataset_name=args.dataset, n_splits=args.n_splits, p_value=args.p_value)
+    classifier = SVMClassifierWithCV(dataset_name=args.dataset, n_splits=args.n_splits, n_features=args.n_features, p_value=args.p_value)
 
     if args.run in ("all", "path_a"):
         classifier.train_path_a_baseline()

@@ -165,9 +165,8 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
             raise ValueError("filter_ttest requires exactly 2 classes.")
         X0, X1 = X[y == classes[0]], X[y == classes[1]]
         _, p_values = ttest_ind(X1, X0, axis=0, equal_var=False)
-        # If a p-value threshold is provided, select all genes meeting it.
+        # If a p-value threshold is provided, select top-k features meeting p <= p_value.
         if self.p_value is not None:
-            self.selection_rule = f"p_value<={self.p_value}"
             mask = np.where(p_values <= float(self.p_value))[0]
             if mask.size == 0:
                 logger.warning(
@@ -179,21 +178,23 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
                 order = np.argsort(p_values)
                 self.selected_features = order[: self.n_features]
             else:
-                self.selected_features = np.sort(mask)
+                # Rank features satisfying p_value <= threshold by p-value and take top_k
+                order = mask[np.argsort(p_values[mask])]
+                self.selected_features = order[: self.n_features]
+                self.selection_rule = f"top_k({len(self.selected_features)})_p<={self.p_value}"
         else:
             self.selection_rule = f"top_k({self.n_features})"
             order = np.argsort(p_values)
             self.selected_features = order[: self.n_features]
         self.feature_scores = p_values
-        logger.info(f"  → {len(self.selected_features)} features selected")
+        logger.info(f"  → {len(self.selected_features)} features selected ({self.selection_rule})")
 
     def _fit_anova(self, X: np.ndarray, y: np.ndarray) -> None:
         logger.info("[filter_anova]  ANOVA F-Test …")
         # Compute F-statistic and associated p-values
         F, p_values = f_classif(X, y)
-        # If a p-value threshold is provided, select all genes meeting it.
+        # If a p-value threshold is provided, select top-k features meeting p <= p_value.
         if self.p_value is not None:
-            self.selection_rule = f"p_value<={self.p_value}"
             mask = np.where(p_values <= float(self.p_value))[0]
             if mask.size == 0:
                 logger.warning(
@@ -207,7 +208,10 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
                 sel.fit(X, y)
                 self.selected_features = sel.get_support(indices=True)
             else:
-                self.selected_features = np.sort(mask)
+                # Rank features satisfying p_value <= threshold by F score descending and take top_k
+                order = mask[np.argsort(-F[mask])]
+                self.selected_features = order[: self.n_features]
+                self.selection_rule = f"top_k({len(self.selected_features)})_p<={self.p_value}"
         else:
             self.selection_rule = f"top_k({self.n_features})"
             k = min(self.n_features, X.shape[1])
@@ -215,7 +219,7 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
             sel.fit(X, y)
             self.selected_features = sel.get_support(indices=True)
         self.feature_scores = F
-        logger.info(f"  → {len(self.selected_features)} features selected")
+        logger.info(f"  → {len(self.selected_features)} features selected ({self.selection_rule})")
 
     # ------------------------------------------------------------------
     # Wrapper helpers
