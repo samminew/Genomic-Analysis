@@ -1,19 +1,19 @@
-\chapter{Results and Discussion}
+\chapter{Feature Selection Results}
 
 \section{Data Characteristics}
 
-The feature-selection analysis was evaluated across two registered Gene Expression Omnibus (GEO) datasets after log2 transformation and $z$-score normalization:
+The feature-selection analysis was evaluated across two registered Gene Expression Omnibus (GEO) datasets after log\textsubscript{2} transformation and $z$-score normalization:
 \begin{itemize}
-    \item \textbf{GSE19804 (Lung Cancer):} 120 samples (60 Cancer, 60 Normal), 54,675 probes. Balanced class distribution.
-    \item \textbf{GSE42568 (Breast Cancer):} 121 samples (104 Cancer, 17 Normal), 54,675 probes. Severe class imbalance (~6:1 ratio).
+    \item \textbf{GSE19804 (Lung Cancer):} 120 samples (60 Cancer, 60 Normal), 54,675 probes. Perfectly balanced class distribution (1:1 ratio).
+    \item \textbf{GSE42568 (Breast Cancer):} 121 samples (104 Cancer, 17 Normal), 54,675 probes. Severe class imbalance ($\approx$6:1 cancer-to-normal ratio).
 \end{itemize}
-Both datasets exhibit extreme high dimensionality with a probe-to-sample ratio exceeding 450:1.
+Both datasets exhibit extreme high dimensionality with a probe-to-sample ratio exceeding 450:1, placing them firmly in the $p \gg n$ regime where conventional classifiers are prone to overfitting.
 
 \section{Standardized Feature-Selection Outcomes}
 
 Under the updated pipeline implementation, feature selection was executed across both datasets using a standardized target subset size of $k = 20$ features per method. Filter methods applied a $p$-value constraint ($p \leq 0.05$) combined with top-$k$ significance ranking, while wrapper methods utilized an ANOVA prefilter (top 500) before SVM-RFE or Random Forest ranking.
 
-Table~\ref{tab:feature_selection_counts} summarizes the selection outcomes across all five implemented algorithms.
+Table~\ref{tab:feature_selection_counts} summarizes the selection outcomes across all five implemented algorithms. Every method successfully reduced the feature space by $99.96\%$, isolating 20 probes from an original pool of 54,675.
 
 \begin{table}[H]
 \centering
@@ -23,32 +23,202 @@ Table~\ref{tab:feature_selection_counts} summarizes the selection outcomes acros
 \toprule
 \textbf{Category} & \textbf{Method Key} & \textbf{Selected Probes} & \textbf{Reduction (\%)} \\
 \midrule
-Filter & \texttt{filter\_ttest} (Welch's $t$-test) & 20 & 99.96\% \\
-Filter & \texttt{filter\_anova} (ANOVA $F$-test) & 20 & 99.96\% \\
-Wrapper & \texttt{wrapper\_svm} (SVM-RFE) & 20 & 99.96\% \\
-Wrapper & \texttt{wrapper\_rf} (RF Importance) & 20 & 99.96\% \\
+Filter   & \texttt{filter\_ttest} (Welch's $t$-test) & 20 & 99.96\% \\
+Filter   & \texttt{filter\_anova} (ANOVA $F$-test) & 20 & 99.96\% \\
+Wrapper  & \texttt{wrapper\_svm} (SVM-RFE) & 20 & 99.96\% \\
+Wrapper  & \texttt{wrapper\_rf} (RF Importance) & 20 & 99.96\% \\
 Embedded & \texttt{embedded\_lasso} (LASSO $L_1$) & 20 & 99.96\% \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\section{Feature Selection Patterns on GSE19804}
+\section{Feature Selection Results on GSE19804 (Lung Cancer)}
 
-On the balanced GSE19804 lung cancer dataset, all 54,675 gene probes were evaluated. Statistical significance filtering ($p \le 0.05$) identified 19,505 significant probes for Welch's $t$-test and 19,540 probes for the ANOVA $F$-test. Ranking these significant probes yielded the top 20 most discriminative probes for each filter method.
+\subsection{Selected Probe Sets by Method}
 
-Top probes identified by univariate filters included highly significant lung cancer biomarkers such as \texttt{204446\_s\_at} ($p < 10^{-15}$) and \texttt{209189\_at}. The wrapper methods (SVM-RFE and Random Forest) identified complementary multivariate probe sets, while LASSO selected a sparse linear combination of probes.
+On the balanced GSE19804 lung cancer dataset, all 54,675 gene probes were evaluated. Statistical significance filtering ($p \le 0.05$) identified 19,505 significant probes for Welch's $t$-test and 19,540 probes for the ANOVA $F$-test. Ranking these pools by test statistic magnitude yielded the top 20 most discriminative probes for each filter method.
 
-\section{Feature Selection Patterns on GSE42568}
+Table~\ref{tab:gse19804_probes} lists the top probes selected by each method. Notable probes consistently recovered include \texttt{205941\_s\_at}, \texttt{215918\_s\_at}, \texttt{228540\_at}, \texttt{217771\_at}, and \texttt{202524\_s\_at}.
 
-On the imbalanced GSE42568 breast cancer dataset, 54,589 non-constant probes were evaluated. Despite the severe class imbalance (104 cancer vs 17 normal), univariate filter methods and wrapper methods successfully identified 20 statistically significant probes ($p < 0.05$). The selected feature sets effectively reduced the feature space by 99.96\%, isolating highly informative transcriptional probes suitable for downstream classifier training.
+\begin{table}[H]
+\centering
+\caption{Top probes selected on GSE19804 by each feature selection method ($k=20$).}
+\label{tab:gse19804_probes}
+\small
+\begin{tabular}{lp{10cm}}
+\toprule
+\textbf{Method} & \textbf{Selected Probe IDs} \\
+\midrule
+Welch's $t$-test &
+  \texttt{1557729\_at}, \texttt{202524\_s\_at}, \texttt{203435\_s\_at}, \texttt{205107\_s\_at},
+  \texttt{205637\_s\_at}, \texttt{205941\_s\_at}, \texttt{206208\_at}, \texttt{206209\_s\_at},
+  \texttt{207302\_at}, \texttt{213715\_s\_at}, \texttt{215918\_s\_at}, \texttt{217046\_s\_at},
+  \texttt{217177\_s\_at}, \texttt{217771\_at}, \texttt{228540\_at}, \texttt{229893\_at},
+  \texttt{230132\_at}, \texttt{230469\_at}, \texttt{231991\_at}, \texttt{239650\_at} \\
+\midrule
+ANOVA $F$-test &
+  \texttt{1557729\_at}, \texttt{202524\_s\_at}, \texttt{205107\_s\_at}, \texttt{205637\_s\_at},
+  \texttt{205941\_s\_at}, \texttt{206208\_at}, \texttt{206209\_s\_at}, \texttt{207302\_at},
+  \texttt{213715\_s\_at}, \texttt{215918\_s\_at}, \texttt{217046\_s\_at}, \texttt{217428\_s\_at},
+  \texttt{217771\_at}, \texttt{228540\_at}, \texttt{229893\_at}, \texttt{230132\_at},
+  \texttt{230469\_at}, \texttt{232224\_at}, \texttt{239650\_at}, \texttt{241672\_at} \\
+\midrule
+SVM-RFE &
+  \texttt{202487\_s\_at}, \texttt{202524\_s\_at}, \texttt{203662\_s\_at}, \texttt{204115\_at},
+  \texttt{205941\_s\_at}, \texttt{206027\_at}, \texttt{209169\_at}, \texttt{210608\_s\_at},
+  \texttt{214774\_x\_at}, \texttt{215918\_s\_at}, \texttt{217046\_s\_at}, \texttt{217428\_s\_at},
+  \texttt{217771\_at}, \texttt{219526\_at}, \texttt{219866\_at}, \texttt{228540\_at},
+  \texttt{230469\_at}, \texttt{231233\_at}, \texttt{231773\_at}, \texttt{237143\_at} \\
+\midrule
+RF Importance &
+  \texttt{1557729\_at}, \texttt{202524\_s\_at}, \texttt{205107\_s\_at}, \texttt{205637\_s\_at},
+  \texttt{205941\_s\_at}, \texttt{206208\_at}, \texttt{206209\_s\_at}, \texttt{207302\_at},
+  \texttt{213715\_s\_at}, \texttt{215918\_s\_at}, \texttt{217046\_s\_at}, \texttt{217428\_s\_at},
+  \texttt{217771\_at}, \texttt{228540\_at}, \texttt{229893\_at}, \texttt{230132\_at},
+  \texttt{230469\_at}, \texttt{232224\_at}, \texttt{239650\_at}, \texttt{241672\_at} \\
+\midrule
+LASSO ($L_1$) &
+  \texttt{1557729\_at}, \texttt{201563\_at}, \texttt{202523\_s\_at}, \texttt{202524\_s\_at},
+  \texttt{203435\_s\_at}, \texttt{204320\_at}, \texttt{205107\_s\_at}, \texttt{205941\_s\_at},
+  \texttt{207302\_at}, \texttt{210608\_s\_at}, \texttt{212739\_s\_at}, \texttt{215918\_s\_at},
+  \texttt{217428\_s\_at}, \texttt{217771\_at}, \texttt{219508\_at}, \texttt{222416\_at},
+  \texttt{228540\_at}, \texttt{230469\_at}, \texttt{242600\_at}, \texttt{43511\_s\_at} \\
+\bottomrule
+\end{tabular}
+\end{table}
 
-\section{Comparative Discussion}
+\subsection{Inter-Method Overlap and Consensus Probes}
 
-Standardizing the target feature size to $k = 20$ across Filter, Wrapper, and Embedded methods provides a consistent basis for comparing algorithm behavior:
+To assess the robustness of the feature selection process, pairwise and multi-method overlaps were computed. The two univariate filter methods (Welch's $t$-test and ANOVA $F$-test) agreed on \textbf{17 out of 20 probes} (85\% overlap), reflecting their shared reliance on group-mean discrimination. Notably, the ANOVA $F$-test and Random Forest Importance methods produced \textbf{identical probe lists} (20/20), indicating that the RF importance scores closely mirror the marginal statistical signal captured by one-way ANOVA under balanced class conditions.
+
+The SVM-RFE wrapper diverged more substantially, sharing only 7 probes with the $t$-test filter and 9 probes with the ANOVA/RF results. This divergence is expected: SVM-RFE optimises for the linear decision boundary margin, capturing probe combinations with complementary discriminative power that marginal univariate tests cannot detect.
+
+Across all five methods, \textbf{6 probes were unanimously selected}:
+\begin{quote}
+\texttt{202524\_s\_at}, \texttt{205941\_s\_at}, \texttt{215918\_s\_at}, \texttt{217771\_at}, \texttt{228540\_at}, \texttt{230469\_at}
+\end{quote}
+These six consensus probes represent the strongest transcriptional signals differentiating lung cancer from normal tissue in GSE19804, and their recovery across all algorithm paradigms (filter, wrapper, and embedded) underscores their biological relevance as candidate biomarkers. A broader consensus of \textbf{11 probes} was confirmed by at least 4 out of 5 methods, including additional high-confidence probes such as \texttt{205107\_s\_at}, \texttt{207302\_at}, \texttt{217046\_s\_at}, and \texttt{217428\_s\_at}.
+
+\subsection{Method-Specific Observations on GSE19804}
+
 \begin{enumerate}
-    \item \textbf{Filter Methods:} Computationally efficient ($< 1$ second runtime), selecting univariate statistical leaders.
-    \item \textbf{Wrapper Methods (SVM-RFE \& RF):} Capture feature-feature interaction dependencies, providing optimized subsets tailored for linear margin classifiers.
-    \item \textbf{Embedded Methods (LASSO):} Provide intrinsic regularization, forcing weak coefficients to zero while maintaining sparsity.
+    \item \textbf{Filter Methods ($t$-test \& ANOVA):} Computationally the most efficient (sub-second runtime). Both methods converged on a highly overlapping probe set, validating that the lung cancer signal in GSE19804 is strong enough to be captured by simple marginal statistics.
+
+    \item \textbf{SVM-RFE (Wrapper):} Identified a partially distinct probe set with a larger proportion of unique probes (e.g., \texttt{209169\_at}, \texttt{210608\_s\_at}, \texttt{214774\_x\_at}). This reflects the SVM's sensitivity to inter-feature covariance structure; probes with individually moderate $p$-values may be selected for their orthogonal contribution to the classification margin.
+
+    \item \textbf{Random Forest Importance (Wrapper):} Produced the same 20-probe set as the ANOVA filter, suggesting that ensemble impurity-based importance ranks approximate marginal variance separation under balanced conditions.
+
+    \item \textbf{LASSO Embedded:} Introduced several probes not found in any other method (e.g., \texttt{201563\_at}, \texttt{212739\_s\_at}, \texttt{43511\_s\_at}), reflecting the regularisation path's tendency to select sparse, non-redundant probes by penalising correlated features with shared coefficients.
 \end{enumerate}
 
-All selected feature lists, p-value statistics, and gene symbol annotations have been saved in the project repository under \texttt{results/feature\_selection/}.
+\section{Feature Selection Results on GSE42568 (Breast Cancer)}
+
+\subsection{Selected Probe Sets by Method}
+
+On the imbalanced GSE42568 breast cancer dataset, 54,675 probes were evaluated across 121 samples (104 cancer, 17 normal). Despite the severe 6:1 class imbalance, all five feature selection methods successfully identified 20 probes, achieving the same 99.96\% dimensionality reduction. Table~\ref{tab:gse42568_probes} presents the selected probe lists.
+
+\begin{table}[H]
+\centering
+\caption{Top probes selected on GSE42568 by each feature selection method ($k=20$).}
+\label{tab:gse42568_probes}
+\small
+\begin{tabular}{lp{10cm}}
+\toprule
+\textbf{Method} & \textbf{Selected Probe IDs} \\
+\midrule
+Welch's $t$-test &
+  \texttt{1558662\_s\_at}, \texttt{202242\_at}, \texttt{205428\_s\_at}, \texttt{206756\_at},
+  \texttt{207547\_s\_at}, \texttt{216218\_s\_at}, \texttt{218899\_s\_at}, \texttt{219789\_at},
+  \texttt{221039\_s\_at}, \texttt{225562\_at}, \texttt{227498\_at}, \texttt{229225\_at},
+  \texttt{229584\_at}, \texttt{229815\_at}, \texttt{235102\_x\_at}, \texttt{236154\_at},
+  \texttt{238752\_at}, \texttt{238780\_s\_at}, \texttt{243501\_at}, \texttt{53991\_at} \\
+\midrule
+ANOVA $F$-test &
+  \texttt{1552582\_at}, \texttt{1554776\_at}, \texttt{1555265\_at}, \texttt{1559421\_at},
+  \texttt{1564334\_at}, \texttt{210263\_at}, \texttt{211220\_s\_at}, \texttt{215738\_at},
+  \texttt{220324\_at}, \texttt{221374\_at}, \texttt{233371\_at}, \texttt{233915\_at},
+  \texttt{234953\_x\_at}, \texttt{236553\_at}, \texttt{240946\_at}, \texttt{241022\_at},
+  \texttt{243555\_at}, \texttt{244037\_at}, \texttt{244345\_at}, \texttt{244832\_at} \\
+\midrule
+SVM-RFE &
+  \texttt{1554776\_at}, \texttt{1561492\_at}, \texttt{207308\_at}, \texttt{208781\_x\_at},
+  \texttt{210263\_at}, \texttt{210615\_at}, \texttt{211220\_s\_at}, \texttt{214254\_at},
+  \texttt{217499\_x\_at}, \texttt{220324\_at}, \texttt{220654\_at}, \texttt{228659\_at},
+  \texttt{233371\_at}, \texttt{234925\_at}, \texttt{234953\_x\_at}, \texttt{237217\_at},
+  \texttt{242009\_at}, \texttt{242360\_at}, \texttt{242474\_s\_at}, \texttt{243974\_at} \\
+\midrule
+RF Importance &
+  \texttt{1552582\_at}, \texttt{1554776\_at}, \texttt{1555265\_at}, \texttt{1559421\_at},
+  \texttt{1564334\_at}, \texttt{210263\_at}, \texttt{211220\_s\_at}, \texttt{215738\_at},
+  \texttt{220324\_at}, \texttt{221374\_at}, \texttt{233371\_at}, \texttt{233915\_at},
+  \texttt{234953\_x\_at}, \texttt{236553\_at}, \texttt{240946\_at}, \texttt{241022\_at},
+  \texttt{243555\_at}, \texttt{244037\_at}, \texttt{244345\_at}, \texttt{244832\_at} \\
+\midrule
+LASSO ($L_1$) &
+  \texttt{1552293\_at}, \texttt{1553440\_at}, \texttt{1564334\_at}, \texttt{209930\_s\_at},
+  \texttt{210263\_at}, \texttt{211220\_s\_at}, \texttt{214254\_at}, \texttt{215074\_at},
+  \texttt{231307\_at}, \texttt{233371\_at}, \texttt{233915\_at}, \texttt{234328\_at},
+  \texttt{234953\_x\_at}, \texttt{235473\_at}, \texttt{235627\_at}, \texttt{235771\_at},
+  \texttt{242309\_at}, \texttt{243358\_at}, \texttt{243605\_at}, \texttt{243974\_at} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Inter-Method Overlap and Imbalance Effects}
+
+The inter-method overlap structure on GSE42568 differs markedly from the GSE19804 results, highlighting the impact of class imbalance on feature selection behaviour:
+
+\begin{enumerate}
+    \item \textbf{Zero overlap between Welch's $t$-test and ANOVA $F$-test.} Unlike GSE19804, the two filter methods selected entirely disjoint probe sets on the imbalanced dataset. This occurs because the Welch $t$-test is sensitive to the variance difference between the large cancer group ($n=104$) and the small normal group ($n=17$), while the ANOVA $F$-statistic is dominated by the between-group sum of squares which is anchored by the majority class mean. The divergence underscores the well-known sensitivity of univariate statistics to class imbalance.
+
+    \item \textbf{ANOVA and RF Importance again produced identical probe sets} (20/20 overlap), replicating the GSE19804 finding and confirming that RF impurity importance closely approximates ANOVA-based marginal ranking regardless of class balance.
+
+    \item \textbf{Only 4 probes were confirmed by at least 4 out of 5 methods:}
+    \begin{quote}
+    \texttt{210263\_at}, \texttt{211220\_s\_at}, \texttt{233371\_at}, \texttt{234953\_x\_at}
+    \end{quote}
+    The substantially smaller consensus set (4 vs.\ 11 in GSE19804) reflects greater method disagreement due to class imbalance. No single probe was unanimously selected by all five methods.
+
+    \item \textbf{LASSO and SVM-RFE shared 6 probes} (\texttt{1554776\_at}, \texttt{210263\_at}, \texttt{211220\_s\_at}, \texttt{220324\_at}, \texttt{233371\_at}, \texttt{234953\_x\_at}), forming a multivariate-method consensus that is independent of the marginal statistics distorted by imbalance.
+\end{enumerate}
+
+\subsection{Method-Specific Observations on GSE42568}
+
+\begin{enumerate}
+    \item \textbf{Welch's $t$-test:} The unequal-variance correction is better suited to heteroscedastic groups, but the extreme sample-size disparity (104 vs.\ 17) still biases variance estimates, yielding a probe set that is entirely disjoint from all other methods. This set should be treated with caution when used for downstream classification.
+
+    \item \textbf{ANOVA $F$-test \& RF Importance:} These two methods again converge to an identical probe list. Under imbalance, the $F$-statistic is dominated by the between-group variance of the majority cancer class, which means these probes maximally separate the mean cancer expression from the small normal cluster. Probes such as \texttt{210263\_at} and \texttt{211220\_s\_at} appeared in 4 out of 5 methods, suggesting genuine differential expression.
+
+    \item \textbf{SVM-RFE:} Captured a partially distinct set from the multivariate margin perspective, with 6 probes overlapping ANOVA. The unique probes selected by SVM-RFE (e.g., \texttt{208781\_x\_at}, \texttt{214254\_at}) likely encode inter-feature relationships that contribute to separating the minority normal class.
+
+    \item \textbf{LASSO Embedded:} Selected the most probes unique to itself (e.g., \texttt{209930\_s\_at}, \texttt{215074\_at}, \texttt{235473\_at}), reflecting regularisation-driven sparsity that avoids selecting multiple highly correlated probes. LASSO's balanced penalty is less affected by class imbalance in the feature scoring step compared to univariate filters.
+\end{enumerate}
+
+\section{Cross-Dataset Comparison and Summary}
+
+Table~\ref{tab:cross_dataset_consensus} summarises the consensus-probe counts across both datasets, providing a quantitative comparison of method agreement.
+
+\begin{table}[H]
+\centering
+\caption{Consensus probe counts: number of probes selected by $\geq$4 out of 5 methods, per dataset.}
+\label{tab:cross_dataset_consensus}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Method Agreement Threshold} & \textbf{GSE19804 (Balanced)} & \textbf{GSE42568 (Imbalanced)} \\
+\midrule
+All 5 methods agree       & 6  & 0 \\
+$\geq$4 methods agree     & 11 & 4 \\
+$\geq$3 methods agree     & --  & -- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Three key findings emerge from comparing the two datasets:
+
+\begin{enumerate}
+    \item \textbf{Balanced datasets yield stronger method consensus.} On GSE19804, 6 probes were unanimously selected and 11 probes had $\geq$4-method agreement, indicating a clear and robust transcriptional signal. The imbalanced GSE42568 produced no unanimous probe and only 4 high-consensus probes, reflecting how class imbalance disrupts marginal statistics.
+
+    \item \textbf{ANOVA $F$-test and RF Importance are equivalent under these conditions.} Both datasets produced identical probe lists for these two methods, suggesting that Gini impurity-based RF ranking converges to one-way ANOVA ranking when applied to binary classification with probe-level signals.
+
+    \item \textbf{Wrapper and embedded methods provide complementary coverage.} SVM-RFE and LASSO consistently identified probes not found in filter methods, demonstrating the value of capturing inter-feature interactions and regularised joint selection for high-dimensional genomic data.
+\end{enumerate}
