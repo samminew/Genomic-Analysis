@@ -36,7 +36,7 @@ Embedded & \texttt{embedded\_lasso} (LASSO $L_1$) & 20 & 99.96\% \\
 
 On the balanced GSE19804 lung cancer dataset, all 54,675 gene probes were evaluated. Statistical significance filtering ($p \le 0.05$) identified 19,505 significant probes for Welch's $t$-test and 19,540 probes for the ANOVA $F$-test. Ranking these significant probes yielded the top 20 most discriminative probes for each filter method.
 
-Top probes identified by univariate filters included highly significant lung cancer biomarkers such as \texttt{204446_s_at} ($p < 10^{-15}$) and \texttt{209189_at}. The wrapper methods (SVM-RFE and Random Forest) identified complementary multivariate probe sets, while LASSO selected a sparse linear combination of probes.
+Top probes identified by univariate filters included highly significant lung cancer biomarkers such as \texttt{204446\_s\_at} ($p < 10^{-15}$) and \texttt{209189\_at}. The wrapper methods (SVM-RFE and Random Forest) identified complementary multivariate probe sets, while LASSO selected a sparse linear combination of probes.
 
 \section{Feature Selection Patterns on GSE42568}
 
@@ -51,4 +51,4 @@ Standardizing the target feature size to $k = 20$ across Filter, Wrapper, and Em
     \item \textbf{Embedded Methods (LASSO):} Provide intrinsic regularization, forcing weak coefficients to zero while maintaining sparsity.
 \end{enumerate}
 
-All selected feature lists, p-value statistics, and gene symbol annotations have been saved in the project repository under \texttt{results/feature_selection/}.
+All selected feature lists, p-value statistics, and gene symbol annotations have been saved in the project repository under \texttt{results/feature\_selection/}.

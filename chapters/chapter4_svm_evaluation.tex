@@ -38,7 +38,7 @@ Table~\ref{tab:gse19804_svm_results} presents the 5-fold stratified cross-valida
 
 \subsection{Performance Analysis on GSE19804}
 \begin{enumerate}
-    \item \textbf{Optimal Classifier Performance:} \textbf{SVM-RFE (\texttt{wrapper\_svm})} achieved the highest overall classification performance across all metrics: **Accuracy = 96.67\%**, **MCC = 0.9346**, and **F1-Score = 96.66\%**.
+    \item \textbf{Optimal Classifier Performance:} \textbf{SVM-RFE (\texttt{wrapper\_svm})} achieved the highest overall classification performance across all metrics: \textbf{Accuracy = 96.67\%}, \textbf{MCC = 0.9346}, and \textbf{F1-Score = 96.66\%}.
     \item \textbf{Variance Reduction:} Applying SVM-RFE reduced metric variance by nearly $50\%$ compared to Path A baseline ($\sigma_{\text{ACC}}$ dropped from $6.85\%$ to $3.49\%$), producing a more robust and stable model.
     \item \textbf{Dimensionality Reduction:} SVM-RFE achieved superior accuracy while discarding $99.96\%$ of noise features (reducing $p = 54,675$ down to $k = 20$).
 \end{enumerate}
@@ -58,8 +58,8 @@ Table~\ref{tab:gse42568_svm_results} reports performance on the imbalanced GSE42
 \midrule
 \textbf{Path A (Baseline)} & $0.8597 \pm 0.021$ & $1.0000$ & $0.0000 \pm 0.000$ & $0.9244 \pm 0.012$ & $\mathbf{0.0000 \pm 0.000}$ & $0.4569$ \\
 \midrule
-\textbf{Path B: Welch's $t$-test} & $0.6237 \pm 0.293$ & $0.6238$ & $\mathbf{0.5333 \pm 0.506}$ & $0.6552 \pm 0.385$ & $\mathbf{0.1139 \pm 0.169}$ & $\mathbf{0.5414}$ \\
-\textbf{Path B: ANOVA $F$-test} & $0.7100 \pm 0.090$ & $0.7981$ & $0.1833 \pm 0.171$ & $0.8238 \pm 0.061$ & $-0.0052 \pm 0.202$ & $0.5219$ \\
+\textbf{Path B: Welch's $t$\text{-test}} & $0.6237 \pm 0.293$ & $0.6238$ & $\mathbf{0.5333 \pm 0.506}$ & $0.6552 \pm 0.385$ & $\mathbf{0.1139 \pm 0.169}$ & $\mathbf{0.5414}$ \\
+\textbf{Path B: ANOVA $F$\text{-test}} & $0.7100 \pm 0.090$ & $0.7981$ & $0.1833 \pm 0.171$ & $0.8238 \pm 0.061$ & $-0.0052 \pm 0.202$ & $0.5219$ \\
 \textbf{Path B: SVM-RFE} & $0.7193 \pm 0.073$ & $0.8171$ & $0.1333 \pm 0.183$ & $0.8322 \pm 0.048$ & $-0.0521 \pm 0.188$ & $0.5486$ \\
 \textbf{Path B: RF Importance} & $0.7100 \pm 0.090$ & $0.7981$ & $0.1833 \pm 0.171$ & $0.8238 \pm 0.061$ & $-0.0052 \pm 0.202$ & $0.5219$ \\
 \textbf{Path B: LASSO ($L_1$)} & $0.8353 \pm 0.055$ & $0.9710$ & $0.0000 \pm 0.000$ & $0.9095 \pm 0.033$ & $-0.0444 \pm 0.062$ & $0.4434$ \\
@@ -69,16 +69,15 @@ Table~\ref{tab:gse42568_svm_results} reports performance on the imbalanced GSE42
 
 \subsection{Path A Majority-Class Collapse vs Path B Recovery}
 
-As shown in Table~\ref{tab:gse42568_svm_results}, Path A baseline on GSE42568 suffered complete majority-class collapse due to extreme dimensionality ($p=54,675$) and severe class imbalance ($86\%$ cancer). The raw SVM predicted all samples as cancer, yielding an inflated accuracy ($85.97\%$) but **$\text{MCC} = 0.0000$** and **Specificity = $0.0\%$** (total failure to identify normal samples).
+As shown in Table~\ref{tab:gse42568_svm_results}, Path A baseline on GSE42568 suffered complete majority-class collapse due to extreme dimensionality ($p=54,675$) and severe class imbalance ($86\%$ cancer). The raw SVM predicted all samples as cancer, yielding an inflated accuracy ($85.97\%$) but \textbf{MCC = 0.0000} and \textbf{Specificity = $0.0\%$} (total failure to identify normal samples).
 
-Applying univariate $t$-test feature selection inside the CV folds (\texttt{path\_b\_filter\_ttest}) broke this trivial majority collapse, recovering a non-zero **MCC of $+0.1139$** and raising **Specificity to $53.33\%$**.
+Applying univariate $t$-test feature selection inside the CV folds (\texttt{path\_b\_filter\_ttest}) broke this trivial majority collapse, recovering a non-zero \textbf{MCC of $+0.1139$} and raising \textbf{Specificity to $53.33\%$}.
 
 \section{Discussion and Summary}
 
-The empirical evaluation leads to two major findings:
+The empirical evaluation leads to three major findings:
 \begin{enumerate}
-    \item **On Balanced Datasets (GSE19804):** Wrapper feature selection (SVM-RFE) effectively eliminates uninformative probe noise, enhancing classification accuracy to **$96.67\%$** and MCC to **$0.9346$** while achieving a $99.96\%$ reduction in feature space.
-    \item **On Imbalanced Datasets (GSE42568):** Feature selection prevents models from collapsing to trivial majority-class predictors, enabling the recovery of true negative (normal) sample discrimination.
-    \item **Leakage Prevention:** Embedding feature selection strictly within cross-validation folds via scikit-learn \texttt{Pipeline} ensures rigorous, unbiased validation of high-dimensional genomic classifiers.
+    \item \textbf{On Balanced Datasets (GSE19804):} Wrapper feature selection (SVM-RFE) effectively eliminates uninformative probe noise, enhancing classification accuracy to \textbf{96.67\%} and MCC to \textbf{0.9346} while achieving a $99.96\%$ reduction in feature space.
+    \item \textbf{On Imbalanced Datasets (GSE42568):} Feature selection prevents models from collapsing to trivial majority-class predictors, enabling the recovery of true negative (normal) sample discrimination.
+    \item \textbf{Leakage Prevention:} Embedding feature selection strictly within cross-validation folds via scikit-learn \texttt{Pipeline} ensures rigorous, unbiased validation of high-dimensional genomic classifiers.
 \end{enumerate}
-wrapper and embedded subsets depending on the analytical goal.
