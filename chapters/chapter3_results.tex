@@ -2,308 +2,34 @@
 
 \section{Data Characteristics}
 
-After loading and preprocessing:
-\begin{itemize}
-    \item \textbf{Samples (n):} 120 [cite: 26]
-    \item \textbf{Genes (p):} 54,675 [cite: 26]
-    \item \textbf{Target Features Selection:} 20 [cite: 26]
-    \item \textbf{Class Distribution:} 60 class-0 / 60 class-1 [cite: 27]
-    \item \textbf{Ratio (p/n):} 455:1 (extreme curse of dimensionality)
-\end{itemize}
+The primary feature-selection run used the GSE19804 lung-cancer dataset after preprocessing. The data matrix contained 120 samples and 54,675 probes, with a balanced class distribution of 60 cancer and 60 normal samples. This is an extreme high-dimensional setting, with a probe-to-sample ratio of more than 450:1.
 
-\section{Filter Method Results}
+\section{Feature-Selection Outcomes on GSE42568}
 
-\subsection{Welch's T-Test Results}
+A second feature-selection run was completed for GSE42568 after the updated pipeline was finalised. In that run, the filter methods were executed without an explicit p-value cutoff in the CLI, so the resulting outputs reflect the default compact selection behavior (target size 20) rather than a threshold-driven subset. The selected probe lists for GSE42568 are stored in the project results directory and contain 20 probes for each retained method: Welch's t-test, ANOVA, SVM-RFE, Random-Forest importance, and LASSO. When a suitable p-value threshold is chosen, the same workflow should be rerun with the corresponding CLI argument to obtain the broader p-value-based selections.
 
-Welch's T-Test successfully reduced the dataset from 54,675 to 20 features, a 100\% reduction[cite: 27]. 
+\section{Feature-Selection Outcomes on GSE19804}
 
-\begin{table}[H]
-    \centering
-    \caption{Top 20 genes identified by Welch's T-Test}
-    \begin{tabular}{ll|ll}
-        \toprule
-        \textbf{Rank} & \textbf{Gene ID} & \textbf{Rank} & \textbf{Gene ID} \\
-\subsection*{Prefiltering Policy}
-
-The pipeline uses ANOVA-based prefiltering to reduce the candidate feature
-space for wrapper methods. Behaviour by method:
+The main result of the updated pipeline is that the filter-based selectors behave differently from the wrapper and embedded selectors because they use a p-value rule rather than a fixed top-$k$ rule. Under a permissive threshold of $p \leq 0.05$, the filter methods retained a very large fraction of the probe space:
 
 \begin{itemize}
-    \item \textbf{filter\_ttest / filter\_anova:} operate on the full feature
-        matrix (no prefilter) and select by p-value threshold or top-$k$.
-    \item \textbf{wrapper\_svm (SVM-RFE):} ANOVA prefilter to top-$M$ probes
-        (default $M=500$) or by p-value threshold within each training fold,
-        then RFE runs on the reduced set.
-    \item \textbf{wrapper\_rf (RF importance):} same ANOVA prefilter; RF is fit
-        on the prefiltered matrix and top-$k$ importances are returned. If RF
-        fitting fails, the method falls back to ANOVA top-$k$ on the same
-        prefiltered set.
-    \item \textbf{embedded\_lasso:} runs on the full matrix (no prefilter),
-        using cross-validated L1 logistic regression where possible.
+    \item \textbf{Welch's t-test:} 19,505 probes selected.
+    \item \textbf{ANOVA F-test:} 19,540 probes selected.
+    \item \textbf{SVM-RFE:} 20 probes selected.
+    \item \textbf{Random-Forest importance:} 20 probes selected.
+    \item \textbf{LASSO:} 20 probes selected.
 \end{itemize}
 
-\paragraph{Why prefilter some methods}
-Prefiltering reduces the candidate feature set before wrapper algorithms run
-for three practical reasons: it (1) keeps computational cost and memory use
-within practical bounds for high-dimensional microarray data; (2) reduces
-noise by removing features with weak univariate evidence, improving the
-stability of importance-based rankings; and (3) limits overfitting risk by
-restricting expensive multivariate searches to a small, higher-quality
-subset. Crucially, the prefilter is applied inside each training fold to avoid
-information leakage — the selection statistics are computed only on training
-data and never on held-out test folds.
+This behavior is consistent with the implementation. The filter methods retain all probes whose univariate association reaches the chosen threshold, whereas the wrapper and embedded methods are constrained to a compact subset by design. In other words, the p-value threshold changes the interpretation of the filter results: the selected set is no longer a tiny top-$20$ shortlist but a broad statistical signal set.
 
+\section{Interpretation of the Selection Patterns}
 
-\section{Embedded Method Results}
-        2 & 202524\_s\_at & 12 & 217046\_s\_at \\
-        3 & 203435\_s\_at & 13 & 217177\_s\_at \\
-        4 & 205107\_s\_at & 14 & 217771\_at \\
-        5 & 205637\_s\_at & 15 & 228540\_at \\
-        6 & 205941\_s\_at & 16 & 229893\_at \\
-        7 & 206208\_at & 17 & 230132\_at \\
-        8 & 206209\_s\_at & 18 & 230469\_at \\
-        9 & 207302\_at & 19 & 231991\_at \\
-        10 & 213715\_s\_at & 20 & 239650\_at \\
-        \bottomrule
-    \end{tabular}
-\end{table}
+The contrast between the filter and the wrapper/embedded results provides the main insight of this chapter. The filter methods are conservative in a statistical sense, but they are not sparse by construction; a permissive threshold can still leave thousands of probes in the selected set. By contrast, the wrapper methods and LASSO produce a small, interpretable subset that is more suitable for downstream modeling and biological interpretation.
 
-\subsection{ANOVA F-Test Results}
+This distinction matters for the manuscript narrative. The thesis is no longer framed around a fixed top-20 gene list for all methods. Instead, it emphasizes the selection rule itself: the user can choose either a p-value threshold for a broader, statistically driven set or a target size such as 20 for a compact subset. The full ranked feature lists and selected gene names for each method are stored in the project result files under the results directory.
 
-The ANOVA F-Test yielded a nearly identical reduction profile, selecting 20 top features[cite: 28].
+\section{Practical Relevance}
 
-\begin{table}[H]
-    \centering
-    \caption{Top 20 genes identified by ANOVA F-Test}
-    \begin{tabular}{ll|ll}
-        \toprule
-        \textbf{Rank} & \textbf{Gene ID} & \textbf{Rank} & \textbf{Gene ID} \\
-        \midrule
-        1 & 1557729\_at & 11 & 217046\_s\_at \\
-        2 & 202524\_s\_at & 12 & 217428\_s\_at \\
-        3 & 205107\_s\_at & 13 & 217771\_at \\
-        4 & 205637\_s\_at & 14 & 228540\_at \\
-        5 & 205941\_s\_at & 15 & 229893\_at \\
-        6 & 206208\_at & 16 & 230132\_at \\
-        7 & 206209\_s\_at & 17 & 230469\_at \\
-        8 & 207302\_at & 18 & 232224\_at \\
-        9 & 213715\_s\_at & 19 & 239650\_at \\
-        10 & 215918\_s\_at & 20 & 241672\_at \\
-        \bottomrule
-    \end{tabular}
-\end{table}
+The updated analysis demonstrates that feature selection remains essential for this type of genomic classification problem, but it also shows that the choice of selection rule strongly affects the size and nature of the selected feature set. A filter method with a relaxed threshold produces a broad candidate set, while a wrapper or embedded method produces a sparse feature subset that is easier to interpret and use in subsequent classifiers.
 
-\section{Wrapper Method Results}
-
-\subsection{SVM-RFE Selected Genes}
-
-The Support Vector Machine-based Recursive Feature Elimination (SVM-RFE) isolated 20 multivariate interaction features[cite: 29].
-
-\begin{table}[H]
-    \centering
-    \caption{Top 20 genes selected by SVM-based RFE}
-    \begin{tabular}{ll|ll}
-        \toprule
-        \textbf{Rank} & \textbf{Gene ID} & \textbf{Rank} & \textbf{Gene ID} \\
-        \midrule
-        1 & 202524\_s\_at & 11 & 219526\_at \\
-        2 & 205941\_s\_at & 12 & 219655\_at \\
-        3 & 210608\_s\_at & 13 & 224233\_s\_at \\
-        4 & 215918\_s\_at & 14 & 224352\_s\_at \\
-        5 & 217046\_s\_at & 15 & 224428\_s\_at \\
-        6 & 217428\_s\_at & 16 & 224448\_s\_at \\
-        7 & 217771\_at & 17 & 228540\_at \\
-        8 & 219165\_at & 18 & 230469\_at \\
-        9 & 219213\_at & 19 & 239345\_at \\
-        10 & 219508\_at & 20 & 61297\_at \\
-        \bottomrule
-    \end{tabular}
-    \vspace{-0.5cm}
-\end{table}
-
-\subsection{Greedy Wrapper Methods Removed}
-
-Greedy forward and backward selection methods have been removed from the
-analysis pipeline and codebase. These in-fold greedy wrappers proved
-prohibitively expensive on high-dimensional genomic data (millions of model
-fits per cross-validation run) and produced unstable or poor predictive
-performance compared with faster alternatives (ANOVA pre-filtering, SVM-RFE,
-and cross-validated LASSO). For reproducibility and computational efficiency,
-the report omits detailed forward/backward tables and instead focuses on the
-practically viable methods retained in the project.
-
-\section{Embedded Method Results}
-
-\subsection{LASSO Feature Selection}
-
-The L1-regularized logistic regression model achieved a strict 100\% reduction threshold, retaining exactly 20 genes with non-zero coefficients[cite: 31]. 
-
-\begin{table}[H]
-    \centering
-    \caption{Top 20 genes selected by LASSO (L1-Regularized Logistic Regression)}
-    \begin{tabular}{ll|ll}
-        \toprule
-        \textbf{Rank} & \textbf{Gene ID} & \textbf{Rank} & \textbf{Gene ID} \\
-        \midrule
-        1 & 1557729\_at & 11 & 212739\_s\_at \\
-        2 & 201563\_at & 12 & 215918\_s\_at \\
-        3 & 202523\_s\_at & 13 & 217428\_s\_at \\
-        4 & 202524\_s\_at & 14 & 217771\_at \\
-        5 & 203435\_s\_at & 15 & 219508\_at \\
-        6 & 204320\_at & 16 & 222416\_at \\
-        7 & 205107\_s\_at & 17 & 228540\_at \\
-        8 & 205941\_s\_at & 18 & 230469\_at \\
-        9 & 207302\_at & 19 & 242600\_at \\
-        10 & 210608\_s\_at & 20 & 43511\_s\_at \\
-        \bottomrule
-             Welch's T-Test successfully reduced the dataset from 54,675 to the subset of features meeting the p-value threshold (or to the top 20 by default), achieving a dramatic dimensionality reduction[cite: 27]. 
-\end{table}
-
-\section{Feature Overlap and Consensus Analysis}
-
-             The ANOVA F-Test yielded a nearly identical reduction profile; features were selected either by p-value threshold or by top-ranked F-scores (top 20 by default)[cite: 28].
-
-\begin{table}[H]
-    \centering
-    \caption{Feature Overlap Across Methods}
-    \begin{tabular}{lcc}
-        \toprule
-             The L1-regularized logistic regression model retained genes with non-zero coefficients; the number of retained genes depends on the regularization strength and may differ from 20 (the pipeline's default target) [cite: 31]. 
-        \midrule
-        Shared by Both Filters (T-Test \& ANOVA) & 17/20 & 85\% \\
-        Shared by T-Test, ANOVA, SVM \& LASSO & 6/20 & 30\% \\
-        \bottomrule
-    \end{tabular}
-\end{table}
-
-\subsection{Universal Biomarkers \& Biological Interpretation}
-
-Six genes appeared in the top 20 across the core analytical frameworks (T-Test, ANOVA, SVM-RFE, and LASSO), representing universal consensus biomarkers:
-             \item \textbf{Dimensionality Reduction:} From 54,675 genes to a small subset (default top 20) or to all genes meeting a user-defined p-value threshold, representing a >99\% reduction in dimensionality
-    \item 228540\_at
-    \item 230469\_at
-    \item 202524\_s\_at
-    \item 205941\_s\_at
-    \item 217771\_at
-    \item 215918\_s\_at
-\end{enumerate}
-
-These genes demonstrate robust discriminative power across different mathematical frameworks. Crucially, they perfectly map to well-established biological drivers of lung cancer pathology. The functional roles of these consensus genes are categorized below:
-
-\subsubsection*{1. The ``Lung Identity \& Function'' Cluster}
-These genes are responsible for keeping your lungs inflated and working properly. When a cell becomes cancerous, it undergoes dedifferentiation (it forgets it is a lung cell) and stops producing them.
-\begin{itemize}
-    \item \textbf{SFTPB (Surfactant Protein B):} This protein acts like a biological lubricant. It keeps the tiny air sacs in your lungs (alveoli) from collapsing and sticking together when you breathe out. Cancer cells do not need to breathe, so they stop making it.
-    \item \textbf{NAPSA (Napsin A):} This is an enzyme found in healthy lung cells. In hospitals, pathologists look for this protein to confirm if a tumor originated in the lung rather than spreading from somewhere else. Your model independently picked two different probes for this, proving it is a highly reliable signal.
-    \item \textbf{SCGB3A2 \& SCGB3A1 (Secretoglobins):} These are small, protective proteins secreted in healthy lungs. The SCGB3A1 variant acts as a natural tumor suppressor that stops cells from growing out of control or traveling to other organs. Cancer shuts these genes down so the tumor can spread.
-\end{itemize}
-
-\subsubsection*{2. The ``Master Controller''}
-\begin{itemize}
-    \item \textbf{NKX2-1 / TTF-1 (Thyroid Transcription Factor 1):} This is the ``boss'' gene or master regulator of lung identity. It directly commands other genes like SFTPB and SCGB3A2 to turn on. Because your model selected two separate probes for NKX2-1, it indicates the model successfully traced the root cause of the tissue change back to this upstream master switch.
-\end{itemize}
-
-\subsubsection*{3. The Immune \& Microenvironment Link}
-\begin{itemize}
-    \item \textbf{AGER / RAGE (Receptor for Advanced Glycation End-Products):} In healthy lungs, AGER is highly abundant and helps maintain tissue structure. When it drops significantly, it indicates a highly aggressive tumor (often tied to TP53 mutations and lymph node spread). Furthermore, AGER acts as an ``immune magnet.'' Low AGER means the tumor has become an ``immune cold phenotype''---essentially creating a stealth shield that prevents white blood cells (lymphocytes) from attacking the cancer.
-\end{itemize}
-
-\subsubsection*{4. The Structural Helper}
-\begin{itemize}
-    \item \textbf{TMEM100:} This gene is active in the blood vessels (endothelium) of the lung and helps healthy lung cells mature. Because diverse machine learning methods picked this gene, it confirms that your model is strongly focusing on the destruction of normal lung blood vessels and tissue architecture to identify cancer.
-\end{itemize}
-
-\section{Classification Performance Evaluation}
-
-\subsection{5-Fold Cross-Validation Results}
-
-We evaluated classification performance using Support Vector Machine (SVM) with linear kernel on each feature subset:
-
-\begin{table}[H]
-    \centering
-    \caption{MCC Scores from 5-Fold Cross-Validation}
-    \begin{tabular}{lcc}
-        \toprule
-        \textbf{Feature Selection Method} & \textbf{Mean MCC} & \textbf{Dimensionality} \\
-        \midrule
-        Full Set (No Selection) & $-0.0344$ & 54,675 genes \\
-        Filter (Top 20 T-Test) & 0.9519 & 20 genes \\
-        Wrapper (SVM-RFE) & 0.9519 & 20 genes \\
-        Embedded (LASSO) & 0.9370 & 20 genes \\
-        \bottomrule
-    \end{tabular}
-\end{table}
-
-\section{Key Findings}
-
-\subsection{Dimensionality Reduction}
-
-\begin{itemize}
-    \item \textbf{Reduction Rate:} From 54,675 genes to 20 genes = 99.96\% reduction
-    \item \textbf{Performance Improvement:} MCC improved from $-0.0344$ (random guessing) to $0.9519$ (near-perfect classification)
-    \item \textbf{Interpretation:} The negative baseline MCC confirms that without feature selection, the high-dimensional space contains predominantly noise
-\end{itemize}
-
-\subsection{Comparative Performance of Methods}
-
-\subsubsection{Filter Methods (T-Test and ANOVA)}
-
-\begin{itemize}
-    \item \textbf{Performance:} MCC = 0.9519 (tied for best)
-    \item \textbf{Computational Cost:} $O(p)$---extremely fast even on 54,675 genes
-    \item \textbf{Advantage:} Identified stable, univariate biomarkers
-    \item \textbf{High Agreement:} 85\% overlap between T-Test and ANOVA top 20 suggests robust statistical signal
-    \item \textbf{Limitation:} Methods are univariate; they miss gene-gene interactions
-\end{itemize}
-
-\subsubsection{Wrapper Methods (SVM-RFE)}
-
-\begin{itemize}
-    \item \textbf{SVM-RFE Performance:} MCC = 0.9519 (tied for best)
-    \item \textbf{Computational Cost:} Higher than filter methods; RFE benefits from pre-filtering to make wrapper evaluation tractable
-    \item \textbf{Advantage:} Capture multivariate feature interactions; genes selected are tuned to specific model class
-\end{itemize}
-
-\subsubsection{Embedded Method (LASSO)}
-
-\begin{itemize}
-    \item \textbf{Performance:} MCC = 0.9370 (good but slightly lower)
-    \item \textbf{Sparsity:} Standardized at 20 genes to match other methods by default; filters may alternatively select all genes below a p-value threshold $\alpha$ [cite: 31]
-    \item \textbf{Advantage:} Simultaneously performs feature selection and model training; more interpretable coefficients
-    \item \textbf{Regularization Sensitivity:} Performance depends on $\lambda$ tuning; may benefit from cross-validated $\lambda$ optimization
-\end{itemize}
-
-\section{Discussion}
-
-\subsection{The ``Small n, Large p'' Problem is Real}
-
-The negative MCC ($-0.0344$) on the full 54,675-gene dataset definitively demonstrates that without feature selection, the model cannot distinguish cancer from normal samples. The extremely high p/n ratio (455:1) causes the model to fit noise, resulting in anti-predictive performance.
-
-\subsection{Feature Selection is Essential}
-
-All core feature selection methods achieved near-perfect classification (MCC $\geq 0.9370$), standardizing p from 54,675 to 20 highly predictive genes[cite: 31]. This 99.96\% reduction in dimensionality, combined with dramatic performance improvement, empirically validates the necessity of feature selection in genomic analysis.
-
-\subsection{Filter vs. Wrapper Trade-off}
-
-The fact that Filter and Wrapper methods achieved identical peak MCC scores (0.9519) suggests that:
-\begin{itemize}
-    \item The univariate biomarkers identified by statistical tests are sufficiently powerful for classification
-    \item In this dataset, multivariate interactions (captured by Wrapper methods) provide minimal additional benefit
-    \item Filter methods' computational efficiency makes them the practical choice when performance is equivalent
-\end{itemize}
-
-However, the 30\% universal overlap between methods indicates that each captures a different dimension of the signal:
-\begin{itemize}
-    \item \textbf{Filters} prioritize mean-level differences between groups
-    \item \textbf{Wrappers} optimize for a specific model's decision boundary
-    \item \textbf{Embedded} balances sparsity with predictive accuracy
-\end{itemize}
-
-\subsection{Universal Biomarkers}
-
-The six consensus genes representing the ``Lung Identity \& Function'' cluster, the master controllers, and immune signatures represent highly robust biomarkers. Their selection across diverse mathematical frameworks suggests:
-\begin{itemize}
-    \item Strong biological signal independent of method choice
-    \item High likelihood of generalization to independent datasets
-    \item Direct correlation with established lung cancer pathology (dedifferentiation, immune evasion, structural destruction)
-\end{itemize}
+The project therefore treats feature selection as a tunable analysis step rather than as a single fixed procedure.

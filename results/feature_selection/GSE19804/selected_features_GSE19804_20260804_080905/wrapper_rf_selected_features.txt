@@ -1,7 +1,7 @@
-Feature Selection Method : ANOVA F-Test (Filter)
-Method Key               : filter_anova
+Feature Selection Method : RandomForest Importance (Wrapper)
+Method Key               : wrapper_rf
 Dataset                  : GSE19804
-Timestamp                : 20260606_022622
+Timestamp                : 20260804_080905
 Original Feature Space   : 54675
 Features Selected        : 20
 Dimensionality Reduction : 99.96%

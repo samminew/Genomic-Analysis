@@ -114,6 +114,7 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
         self.lasso_scoring = lasso_scoring
         self.selected_features: Optional[np.ndarray] = None
         self.feature_scores: Optional[np.ndarray] = None
+        self.selection_rule: str = "top_k"
         # Diagnostic results for embedded LASSO CV (filled after fit)
         self.lasso_cv_results: dict | None = None
 
@@ -166,6 +167,7 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
         _, p_values = ttest_ind(X1, X0, axis=0, equal_var=False)
         # If a p-value threshold is provided, select all genes meeting it.
         if self.p_value is not None:
+            self.selection_rule = f"p_value<={self.p_value}"
             mask = np.where(p_values <= float(self.p_value))[0]
             if mask.size == 0:
                 logger.warning(
@@ -173,11 +175,13 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
                     self.p_value,
                     self.n_features,
                 )
+                self.selection_rule = f"top_k({self.n_features})"
                 order = np.argsort(p_values)
                 self.selected_features = order[: self.n_features]
             else:
                 self.selected_features = np.sort(mask)
         else:
+            self.selection_rule = f"top_k({self.n_features})"
             order = np.argsort(p_values)
             self.selected_features = order[: self.n_features]
         self.feature_scores = p_values
@@ -189,6 +193,7 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
         F, p_values = f_classif(X, y)
         # If a p-value threshold is provided, select all genes meeting it.
         if self.p_value is not None:
+            self.selection_rule = f"p_value<={self.p_value}"
             mask = np.where(p_values <= float(self.p_value))[0]
             if mask.size == 0:
                 logger.warning(
@@ -196,6 +201,7 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
                     self.p_value,
                     self.n_features,
                 )
+                self.selection_rule = f"top_k({self.n_features})"
                 k = min(self.n_features, X.shape[1])
                 sel = SelectKBest(score_func=f_classif, k=k)
                 sel.fit(X, y)
@@ -203,6 +209,7 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
             else:
                 self.selected_features = np.sort(mask)
         else:
+            self.selection_rule = f"top_k({self.n_features})"
             k = min(self.n_features, X.shape[1])
             sel = SelectKBest(score_func=f_classif, k=k)
             sel.fit(X, y)
@@ -272,7 +279,7 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
         X_pre, pre_idx = self._prefilter(X, y)
         logger.info(f"  Pre-filtered to {X_pre.shape[1]} features, fitting RandomForest …")
         rf = RandomForestClassifier(
-            n_estimators=200, random_state=42,
+            n_estimators=80, random_state=42,
             n_jobs=-1, class_weight="balanced",
         )
         try:
@@ -285,6 +292,7 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
             # keep them sorted for downstream reproducibility
             self.selected_features = np.sort(selected_orig_idx)
             self.feature_scores = importances
+            self.selection_rule = f"wrapper_rf(top_k={k})"
             logger.info(f"  → {len(self.selected_features)} features selected (top-{k} by RF importance)")
         except Exception as exc:
             logger.warning(f"  RandomForest fit failed ({exc}); falling back to ANOVA top-k prefilter")
@@ -297,6 +305,7 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
             # store F-scores as feature_scores when RF importances unavailable
             F, _ = f_classif(X_pre, y)
             self.feature_scores = F
+            self.selection_rule = f"fallback_anova(top_k={k})"
             logger.info(f"  → {len(self.selected_features)} features selected (top-{k} by ANOVA fallback)")
 
     # Note: greedy forward/backward wrapper methods removed — they were

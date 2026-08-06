@@ -68,7 +68,7 @@ class GenomicDataProcessor:
         },
     }
 
-    def __init__(self, dataset_name: str = "GSE19804", project_dir: str = ""):
+    def __init__(self, dataset_name: str = "GSE42568", project_dir: str = ""):
         """
         Parameters
         ----------

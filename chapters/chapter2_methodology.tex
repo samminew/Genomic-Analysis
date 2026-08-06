@@ -2,169 +2,89 @@
 
 \section{Dataset Description}
 
-This study utilized the GSE19804 lung cancer gene expression dataset from the NCBI Gene Expression Omnibus (GEO) database. The dataset comprises:
+The analysis used the two GEO datasets registered in the preprocessing pipeline: GSE19804 and GSE42568. The primary feature-selection workflow was carried out on GSE19804, a balanced lung-cancer dataset, while GSE42568 was retained as a secondary benchmark for the SVM evaluation chapter. Both datasets contain the same high-dimensional structure characteristic of microarray studies:
+
 \begin{itemize}
-    \item \textbf{Total Samples:} 120 (60 cancer, 60 normal)
-    \item \textbf{Total Features:} 54,675 genes (probes)
-    \item \textbf{Data Type:} Bulk RNA-seq microarray expression values
+    \item \textbf{GSE19804:} 120 samples (60 cancer, 60 normal) and 54,675 probes.
+    \item \textbf{GSE42568:} 121 samples (104 cancer, 17 normal) and 54,675 probes.
+    \item \textbf{Data type:} bulk expression values from Affymetrix-style microarray experiments.
 \end{itemize}
 
-The balanced class distribution (60-60) provides an ideal scenario for evaluating feature selection methods without accounting for class imbalance bias in the initial stages.
+The inclusion of both datasets makes it possible to study feature-selection behavior under different class-balance regimes while keeping the same preprocessing and modeling framework.
 
 \section{Data Preprocessing and Normalization}
 
-Raw gene expression data is typically exponentially distributed and contains substantial noise. We applied two critical preprocessing transformations:
+Raw gene-expression values are typically right-skewed and contain substantial measurement noise. We therefore applied a two-step preprocessing pipeline before any feature selection or classification step:
 
 \subsection{Log2 Transformation}
 
-The raw expression values $x$ are transformed as:
+Each expression value $x$ was transformed as
 \begin{equation}
-    y = \log_2(x + 1)
+    y = \log_2(x + 1).
 \end{equation}
 
-\textbf{Justification:}
-\begin{itemize}
-    \item Compresses the massive range of expression values
-    \item Stabilizes variance, making data more additive
-    \item Reduces right-skewness inherent in biological data
-\end{itemize}
+This stabilizes variance, reduces skewness, and makes the data more suitable for parametric statistical tests and linear models.
 
 \subsection{Standardization (Z-score Normalization)}
 
-Following log transformation, we apply standardization:
+After the log transformation, each feature was standardized across samples:
 \begin{equation}
-    z = \frac{x - \mu}{\sigma}
+    z = \frac{x - \mu}{\sigma},
 \end{equation}
 
-where $\mu$ is the mean and $\sigma$ is the standard deviation across all samples for each gene.
-
-\textbf{Justification:}
-\begin{itemize}
-    \item Shifts the mean to 0 and standard deviation to 1
-    \item Required for LASSO and SVM to ensure genes with high absolute values do not dominate
-    \item Improves numerical stability in optimization algorithms
-\end{itemize}
+where $\mu$ and $\sigma$ denote the feature mean and standard deviation. Standardization is particularly important for regularized methods such as LASSO and for SVMs, because it prevents features with large absolute values from dominating the optimization objective.
 
 \section{Feature Selection Methods}
 
-We implemented and compared three fundamental feature selection approaches:
+We compared three families of feature-selection strategies: filter, wrapper, and embedded methods. All selectors were fit inside each training fold of cross-validation so that feature selection could not leak information from the held-out data.
 
 \subsection{Filter Methods}
 
 \subsubsection{Welch's Independent Two-Sample T-Test}
 
-For each gene $j$, we computed the $t$-statistic comparing cancer versus normal samples:
+For each probe $j$, we computed the Welch $t$-statistic comparing cancer and normal samples:
 \begin{equation}
-    t_j = \frac{\bar{x}_{c,j} - \bar{x}_{n,j}}{\sqrt{\frac{s_{c,j}^2}{n_c} + \frac{s_{n,j}^2}{n_n}}}
+    t_j = \frac{\bar{x}_{c,j} - \bar{x}_{n,j}}{\sqrt{\frac{s_{c,j}^2}{n_c} + \frac{s_{n,j}^2}{n_n}}},
 \end{equation}
 
-where:
-\begin{itemize}
-    \item $\bar{x}_{c,j}$ and $\bar{x}_{n,j}$ are mean expressions in cancer and normal groups
-    \item $s_{c,j}^2$ and $s_{n,j}^2$ are sample variances
-    \item $n_c = 60$ and $n_n = 60$ are sample sizes per group
-\end{itemize}
+where $\bar{x}_{c,j}$ and $\bar{x}_{n,j}$ denote the sample means in the cancer and normal groups, and $n_c$ and $n_n$ are the corresponding sample sizes. The resulting $p$-values were used to rank probes.
 
-Welch's variant does not assume equal variances ($\sigma_c^2 \neq \sigma_n^2$), which is realistic for cancer data where diseased tissue exhibits higher genetic heterogeneity.
+\textbf{Selection rule:} if a p-value threshold $\alpha$ is supplied, all probes with $p \leq \alpha$ are retained; otherwise the method selects the top-$k$ probes by rank.
 
-\textbf{Output:} Genes ranked by $p$-value (smallest first). By default the top 20 genes are reported; optionally a user-defined p-value threshold $\alpha$ can be supplied and all genes with $p \leq \alpha$ will be selected instead of a fixed top-$k$.
+For the feature-selection runs completed so far, the CLI was invoked without an explicit $\alpha$ value for the filter methods. The outputs therefore reflect the default compact top-$k$ behavior (target size 20) rather than a threshold-driven subset. Once a suitable p-value threshold has been chosen, the same workflow should be rerun with the corresponding CLI argument to obtain the broader p-value-based selections.
 
 \subsubsection{ANOVA F-Test}
 
-The $F$-statistic evaluates the ratio of variance explained by group membership to variance within groups:
-\begin{equation}
-    F_j = \frac{\text{MS}_{\text{between}}}{\text{MS}_{\text{within}}}
-\end{equation}
-
-where:
-\begin{itemize}
-    \item $\text{MS}_{\text{between}}$ = variance explained by cancer vs. normal distinction
-    \item $\text{MS}_{\text{within}}$ = variance within each group (noise)
-\end{itemize}
-
-\textbf{Advantage:} ANOVA penalizes features with high intra-class variance, prioritizing genes with consistent, homogeneous expression within each group.
-
-\textbf{Output:} Genes ranked by $F$-score (highest first) and associated $p$-values. By default the top 20 genes are reported; optionally a user-defined p-value threshold $\alpha$ can be supplied and all genes with $p \leq \alpha$ will be selected instead of a fixed top-$k$.
+The ANOVA F-test evaluates whether the between-group variance exceeds the within-group variance for each probe. Probes with larger F-scores and smaller associated $p$-values are treated as more discriminative. As with the t-test, the implementation supports either selection by p-value threshold or selection of the top-$k$ features. The same caveat applies here: the runs completed so far did not pass a p-value cutoff to the CLI, so they used the default top-$k$ selection mode.
 
 \subsection{Wrapper Methods}
 
-\subsubsection{SVM-based Recursive Feature Elimination (RFE)}
+\subsubsection{SVM-RFE and Random-Forest Importance}
 
-Algorithm:
-\begin{enumerate}
-    \item Pre-filter to top 500 genes (using Welch's $t$-test results) to reduce computational cost
-    \item Train a Linear SVM classifier: $\min_w \frac{1}{2}\|w\|^2 + C \sum_{i=1}^{n} \xi_i$
-    \item Compute feature importance: $|w_j|$ (absolute coefficient magnitude)
-    \item Remove the $k=10$ genes with smallest $|w_j|$
-    \item Repeat until 20 genes remain
-\end{enumerate}
+Wrapper methods were implemented with an ANOVA-based prefiltering step. In each training fold, the pipeline first computes ANOVA statistics and retains a reduced candidate set before any wrapper search begins. This step is important for two reasons: it makes the wrapper search computationally tractable on tens of thousands of probes, and it removes features with weak univariate signal before a multivariate model is fit.
 
-\textbf{Output:} 20 genes selected by iterative SVM-based elimination.
+The retained candidate set is then passed to either:
+\begin{itemize}
+    \item \textbf{SVM-RFE}, which repeatedly removes the least important features according to a linear SVM, or
+    \item \textbf{Random-Forest importance}, which ranks probes by impurity reduction.
+\end{itemize}
 
-\subsubsection{Random Forest-based RFE}
-
-Algorithm:
-\begin{enumerate}
-    \item Initialize Random Forest with 100 trees
-    \item Compute feature importance using Gini impurity: higher if a gene reduces impurity across trees
-    \item Remove the $k=10$ genes with lowest importance scores
-    \item Repeat until 20 genes remain
-\end{enumerate}
-
-\textbf{Output:} 20 genes selected. Captures non-linear gene-gene interactions missed by SVM.
+Greedy forward and backward selection were removed from the implementation because they required orders of magnitude more model fits and were not competitive in this high-dimensional setting.
 
 \subsection{Embedded Methods}
 
 \subsubsection{LASSO (L1-Regularized Logistic Regression)}
 
-We trained a Logistic Regression model with L1 penalty:
-\begin{equation}
-    \min_{\beta} \left\{ -\frac{1}{n}\sum_{i=1}^{n} \left[y_i \log(\sigma(X_i \beta)) + (1-y_i) \log(1 - \sigma(X_i \beta))\right] + \lambda \|\beta\|_1 \right\}
-\end{equation}
-
-where:
-\begin{itemize}
-    \item $\sigma(\cdot)$ is the sigmoid function
-     \item $\lambda$ is the regularization strength (tuned by cross-validation)
-\end{itemize}
-\textbf{Note:} In the implementation the L1 regularization strength is selected by cross-validation (LogisticRegressionCV) over a grid of inverse-regularization values `C`. Smaller `C` implies stronger regularization (i.e. larger $\lambda$). This avoids using a single fixed $\lambda$ value that may over-regularise the model.
-    \item The $L_1$ penalty forces $\beta_j = 0$ for irrelevant genes
-\end{itemize}
-
-\textbf{Output:} Automatically selects genes with non-zero coefficients (33 genes retained).
+The embedded selector uses L1-regularized logistic regression. The model minimizes a penalized logistic-loss objective and forces many coefficients to zero, yielding a sparse set of selected probes. In the implementation, the regularization strength is selected by cross-validated logistic regression over a grid of inverse-regularization values $C$; smaller values of $C$ imply stronger regularization. If the cross-validated fit fails, the code falls back to a fixed-$C$ LASSO model.
 
 \section{Evaluation Metrics}
 
-We evaluated all feature subsets using two primary metrics:
-
-\subsection{Matthews Correlation Coefficient (MCC)}
-
-MCC is a balanced metric suitable for imbalanced datasets:
-\begin{equation}
-    \text{MCC} = \frac{TP \times TN - FP \times FN}{\sqrt{(TP+FP)(TP+FN)(TN+FP)(TN+FN)}}
-\end{equation}
-
-Range: $[-1, 1]$ where:
-\begin{itemize}
-    \item $+1$ = perfect prediction
-    \item $0$ = no better than random
-    \item $-1$ = perfect anti-prediction
-\end{itemize}
+The selected feature subsets were assessed with the Matthews Correlation Coefficient (MCC), accuracy, precision, recall, F1-score, and ROC-AUC when applicable. MCC was used as the main summary metric because it remains informative for imbalanced datasets and does not inflate performance when one class dominates the sample distribution.
 
 \subsection{Cross-Validation Strategy}
 
-We used 5-fold stratified cross-validation to ensure:
-\begin{itemize}
-    \item Balanced class distribution in each fold
-    \item Robust performance estimates
-    \item Detection of overfitting
-\end{itemize}
+A 5-fold stratified cross-validation strategy was used throughout the study. This procedure preserves the class distribution within each fold, provides a more stable estimate of generalization performance, and reduces the chance that a single split dominates the results.
 
-\section{Comparative Analysis: Feature Overlap}
+\section{Comparative Analysis of Selected Feature Sets}
 
-To understand the consensus among methods, we computed set intersections across the top 20 genes from each method:
-\begin{itemize}
-    \item \textbf{Filter Consensus:} $|T\text{-test} \cap \text{ANOVA}|$ (how much do statistical tests agree?)
-    \item \textbf{Wrapper Consensus:} $|\text{SVM-RFE} \cap \text{RF-RFE}|$ (how much do ML models agree?)
-    \item \textbf{Universal Consensus:} $|T\text{-test} \cap \text{ANOVA} \cap \text{SVM-RFE} \cap \text{RF-RFE}|$ (gold-standard genes)
-\end{itemize}
+The project compares feature sets not only by predictive performance but also by overlap across methods. Because the filter methods can retain a large number of probes when a permissive p-value threshold is used, overlap is interpreted as a qualitative measure of stability rather than as a strict top-$k$ comparison. The generated summary files store the full selected feature lists for each method and dataset, making the comparison reproducible.

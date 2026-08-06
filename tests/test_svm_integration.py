@@ -38,3 +38,20 @@ def test_path_b_filter_ttest_one_fold():
     sel = pipeline.named_steps['selector'].selected_features
     assert sel is not None and len(sel) > 0
     assert len(y_pred) == len(y_test)
+
+
+def test_selector_reports_pvalue_selection_rule():
+    selector = FeatureSelector(method='filter_ttest', n_features=5, p_value=0.05)
+    assert selector.selection_rule == 'p_value<=0.05'
+
+
+def test_wrapper_rf_fallback_returns_features():
+    df = pd.read_csv('tests/synthetic.csv', index_col=0)
+    y = df['label'].to_numpy(dtype=int)
+    X = df.drop(columns=['label']).to_numpy()
+
+    selector = FeatureSelector(method='wrapper_rf', n_features=5, p_value=0.05)
+    selector.fit(X, y)
+
+    assert selector.selected_features is not None
+    assert len(selector.selected_features) > 0

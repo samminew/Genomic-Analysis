@@ -117,3 +117,7 @@ htmlcov/
 .project
 .pydevproject
 *.bak
+
+# results
+results/GSE19804_lung_cancer/
+results/GSE42568_breast_cancer/
