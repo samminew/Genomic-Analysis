@@ -481,8 +481,8 @@ def main() -> None:
     )
 
     parser = argparse.ArgumentParser(description="Run SVM classifier pipeline")
-    parser.add_argument("--dataset", "-d", default="GSE42568",
-                        help="Dataset name or path (default: GSE42568)")
+    parser.add_argument("--dataset", "-d", default="GSE19804",
+                        help="Dataset name or path (default: GSE19804)")
     parser.add_argument("--n-splits", type=int, default=5,
                         help="Number of CV splits (default: 5)")
     parser.add_argument("--method", "-m", default=None,

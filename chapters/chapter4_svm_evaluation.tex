@@ -12,6 +12,19 @@ The experimental framework comprised two distinct tracks:
 
 By placing the \texttt{FeatureSelector} inside the cross-validation pipeline, feature ranking and subset selection were computed exclusively on each training fold ($80\%$ of data), guaranteeing zero data leakage to the evaluation test fold ($20\%$ of data).
 
+\subsection{Evaluation Metrics}
+
+Each pipeline is scored on five folds and reported as mean $\pm$ standard deviation. Because the two datasets differ substantially in class balance, no single metric is sufficient on its own, so the following complementary measures are reported together:
+
+\begin{itemize}
+    \item \textbf{Accuracy} -- the overall proportion of correctly classified samples. On imbalanced data this metric can be misleadingly high if the classifier simply predicts the majority class.
+    \item \textbf{Precision and Recall (Sensitivity)} -- precision is the proportion of predicted-positive samples that are true positives; recall (equivalently, sensitivity) is the proportion of true positives that are correctly identified.
+    \item \textbf{Specificity} -- the proportion of true negatives correctly identified. This is the metric most sensitive to majority-class collapse, since a classifier that always predicts the positive class scores $0\%$ specificity regardless of its accuracy.
+    \item \textbf{F1-Score} -- the harmonic mean of precision and recall, useful when the cost of false positives and false negatives is similar.
+    \item \textbf{Matthews Correlation Coefficient (MCC)} -- a single balanced measure computed from all four confusion-matrix cells, ranging from $-1$ (total disagreement) through $0$ (random / majority-class guessing) to $+1$ (perfect prediction). MCC is regarded as the most reliable single indicator of classifier quality under class imbalance and is treated as the primary decision metric in this chapter whenever it conflicts with accuracy.
+    \item \textbf{ROC-AUC} -- the area under the receiver operating characteristic curve, summarising the trade-off between sensitivity and the false-positive rate independently of the classification threshold.
+\end{itemize}
+
 \section{Quantitative Results on GSE19804 (Balanced Dataset)}
 
 Table~\ref{tab:gse19804_svm_results} presents the 5-fold stratified cross-validation metrics on the GSE19804 dataset.
@@ -36,11 +49,23 @@ Table~\ref{tab:gse19804_svm_results} presents the 5-fold stratified cross-valida
 \end{tabular}
 \end{table}
 
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{figures/fig_gse19804_comparison.png}
+\caption{Accuracy, MCC, and ROC-AUC across all six pipelines on GSE19804. All feature-selection variants match or exceed the Path A baseline, with SVM-RFE consistently on top for accuracy and MCC.}
+\label{fig:gse19804_comparison}
+\end{figure}
+
 \subsection{Performance Analysis on GSE19804}
+
+Figure~\ref{fig:gse19804_comparison} visualises the three headline metrics side by side for every pipeline. Because GSE19804 is class-balanced, accuracy, MCC, and ROC-AUC largely agree on which pipelines perform well, which is itself a useful sanity check that the balanced setting is behaving as expected.
+
 \begin{enumerate}
-    \item \textbf{Optimal Classifier Performance:} \textbf{SVM-RFE (\texttt{wrapper\_svm})} achieved the highest overall classification performance across all metrics: \textbf{Accuracy = 96.67\%}, \textbf{MCC = 0.9346}, and \textbf{F1-Score = 96.66\%}.
-    \item \textbf{Variance Reduction:} Applying SVM-RFE reduced metric variance by nearly $50\%$ compared to Path A baseline ($\sigma_{\text{ACC}}$ dropped from $6.85\%$ to $3.49\%$), producing a more robust and stable model.
-    \item \textbf{Dimensionality Reduction:} SVM-RFE achieved superior accuracy while discarding $99.96\%$ of noise features (reducing $p = 54,675$ down to $k = 20$).
+    \item \textbf{Optimal Classifier Performance:} \textbf{SVM-RFE (\texttt{wrapper\_svm})} achieved the highest overall classification performance across all metrics: \textbf{Accuracy = 96.67\%}, \textbf{MCC = 0.9346}, and \textbf{F1-Score = 96.66\%}. It also attains the joint-best Precision ($96.79\%$) and Recall ($96.67\%$), meaning it makes the fewest and most balanced errors of any pipeline, rather than trading one error type off against the other.
+    \item \textbf{Variance Reduction:} Applying SVM-RFE reduced metric variance by nearly $50\%$ compared to the Path A baseline ($\sigma_{\text{ACC}}$ dropped from $6.85\%$ to $3.49\%$), producing a more robust and stable model whose performance is less sensitive to which samples fall into each cross-validation fold.
+    \item \textbf{Dimensionality Reduction:} SVM-RFE achieved superior accuracy while discarding $99.96\%$ of noise features (reducing $p = 54{,}675$ down to $k = 20$), indicating that the vast majority of probes on the microarray carry no discriminative signal for this task and that a compact, interpretable gene panel is sufficient.
+    \item \textbf{Filter Methods are a Strong, Cheap Alternative:} The univariate filters (Welch's $t$-test, ANOVA $F$-test) and the RF-importance embedded method all land within $1$--$2$ percentage points of SVM-RFE on accuracy and MCC, and two of them (ANOVA, RF-importance) actually achieve the highest ROC-AUC of $0.9903$. Since these methods are computationally far cheaper than the iterative wrapper search used by SVM-RFE, they represent a favourable accuracy-for-cost trade-off when compute budget is constrained.
+    \item \textbf{LASSO Underperforms Here:} The $L_1$-embedded selector (LASSO) is the weakest of the five Path B variants (Accuracy $= 92.50\%$, MCC $= 0.8560$) and also shows the highest variance among the feature-selected pipelines ($\sigma_{\text{ACC}} = 9.03\%$), suggesting that its sparsity-inducing penalty is discarding some genes that are informative under the balanced 5-fold split.
 \end{enumerate}
 
 \section{Quantitative Results on GSE42568 (Imbalanced Dataset)}
@@ -67,17 +92,33 @@ Table~\ref{tab:gse42568_svm_results} reports performance on the imbalanced GSE42
 \end{tabular}
 \end{table}
 
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{figures/fig_gse42568_comparison.png}
+\caption{Accuracy, MCC, and Specificity across all six pipelines on GSE42568. High accuracy alone (blue bars) is a misleading indicator here: the two most "accurate" pipelines, Path A and LASSO, both score $0\%$ specificity and MCC $\le 0$, revealing that their accuracy is an artefact of always predicting the majority class.}
+\label{fig:gse42568_comparison}
+\end{figure}
+
 \subsection{Path A Majority-Class Collapse vs Path B Recovery}
 
-As shown in Table~\ref{tab:gse42568_svm_results}, Path A baseline on GSE42568 suffered complete majority-class collapse due to extreme dimensionality ($p=54,675$) and severe class imbalance ($86\%$ cancer). The raw SVM predicted all samples as cancer, yielding an inflated accuracy ($85.97\%$) but \textbf{MCC = 0.0000} and \textbf{Specificity = $0.0\%$} (total failure to identify normal samples).
+As shown in Table~\ref{tab:gse42568_svm_results} and Figure~\ref{fig:gse42568_comparison}, the Path A baseline on GSE42568 suffered complete majority-class collapse due to extreme dimensionality ($p=54{,}675$) relative to the sample size ($n=121$), compounded by severe class imbalance ($104$ cancer vs. $17$ normal, i.e.\ $86\%$ cancer). The raw SVM predicted every sample as cancer, yielding an inflated accuracy ($85.97\%$) that at first glance looks competitive with the balanced-dataset results, but a \textbf{Recall/Sensitivity of $100\%$} paired with \textbf{Specificity $=0.0\%$} shows the model never once identified a normal sample. This is confirmed by \textbf{MCC $= 0.0000$}, the value expected under pure majority-class guessing, and by the near-chance \textbf{ROC-AUC of $0.4569$} -- both indicating the classifier has learned no discriminative signal at all. Accuracy alone would have concealed this failure entirely, which is precisely why MCC and specificity are reported as primary metrics for this dataset.
 
-Applying univariate $t$-test feature selection inside the CV folds (\texttt{path\_b\_filter\_ttest}) broke this trivial majority collapse, recovering a non-zero \textbf{MCC of $+0.1139$} and raising \textbf{Specificity to $53.33\%$}.
+Applying univariate $t$-test feature selection inside the CV folds (\texttt{path\_b\_filter\_ttest}) broke this trivial majority collapse: accuracy \emph{fell} to $62.37\%$, but this is a genuine improvement in model quality, since the pipeline recovered a non-zero \textbf{MCC of $+0.1139$} and raised \textbf{Specificity to $53.33\%$} -- meaning the model now correctly flags roughly half of the normal-tissue samples instead of none. The large standard deviation on this pipeline ($\sigma_{\text{ACC}} = 29.3\%$, $\sigma_{\text{Spec}} = 50.6\%$) reflects how few normal samples ($n=17$) are available per fold: with only $3$--$4$ normal samples per test fold, a single misclassification swings the fold's specificity by $25$--$33$ percentage points, so these numbers should be read as indicative of a genuine but noisy improvement rather than a precise estimate.
+
+The remaining Path B variants (ANOVA, SVM-RFE, RF-importance) show the same qualitative pattern: accuracy drops to $71$--$72\%$ relative to the Path A baseline, while specificity rises from $0\%$ to $13$--$18\%$. Their MCC values, however, are slightly \emph{negative} ($-0.005$ to $-0.052$), which is worse than the $0.0000$ obtained by random/majority-class guessing. This indicates that although these three selectors do induce some normal-sample recall, the specific $20$-gene subsets they choose are, on balance, weakly \emph{anti}-correlated with the true labels on this dataset -- worse than not discriminating at all. \textbf{LASSO} sits between these two behaviours: it recovers almost none of the majority-class collapse (Specificity $=0.0\%$, matching Path A) while its MCC ($-0.0444$) is also mildly negative, making it the least useful selector for this dataset despite its second-highest raw accuracy ($83.53\%$).
+
+Taken together, \textbf{Welch's $t$-test filter is the only pipeline that produces a clearly positive, non-trivial MCC on GSE42568} ($+0.1139$), and it is therefore the recommended Path B variant for this imbalanced dataset -- in direct contrast to GSE19804, where SVM-RFE was the strongest performer. This divergence is itself a finding: the optimal feature-selection strategy is not universal but depends on the class balance and sample size of the target dataset, and it reinforces the importance of evaluating feature-selection methods per dataset rather than assuming a single method dominates across tasks.
 
 \section{Discussion and Summary}
 
-The empirical evaluation leads to three major findings:
+The empirical evaluation leads to four major findings:
 \begin{enumerate}
-    \item \textbf{On Balanced Datasets (GSE19804):} Wrapper feature selection (SVM-RFE) effectively eliminates uninformative probe noise, enhancing classification accuracy to \textbf{96.67\%} and MCC to \textbf{0.9346} while achieving a $99.96\%$ reduction in feature space.
-    \item \textbf{On Imbalanced Datasets (GSE42568):} Feature selection prevents models from collapsing to trivial majority-class predictors, enabling the recovery of true negative (normal) sample discrimination.
-    \item \textbf{Leakage Prevention:} Embedding feature selection strictly within cross-validation folds via scikit-learn \texttt{Pipeline} ensures rigorous, unbiased validation of high-dimensional genomic classifiers.
+    \item \textbf{On Balanced Datasets (GSE19804):} Wrapper feature selection (SVM-RFE) effectively eliminates uninformative probe noise, enhancing classification accuracy to \textbf{96.67\%} and MCC to \textbf{0.9346} while achieving a $99.96\%$ reduction in feature space. Cheaper univariate filters (ANOVA, $t$-test) trail SVM-RFE by only $1$--$2$ points, making them a reasonable choice when computational cost matters more than the last percentage point of accuracy.
+    \item \textbf{On Imbalanced Datasets (GSE42568):} Accuracy is an unreliable indicator on this dataset -- the two highest-accuracy pipelines (Path A and LASSO) both fail completely on the minority class (Specificity $=0\%$, MCC $\le 0$). Feature selection is necessary but not sufficient to prevent majority-class collapse: only the $t$-test filter achieved a clearly positive MCC, while the wrapper and RF-importance methods, despite reducing accuracy in the "right" direction, produced mildly negative MCC values, showing they selected gene subsets that do not generalise well under this imbalance and small minority-class size ($n=17$).
+    \item \textbf{No Universally Best Selector:} SVM-RFE is optimal for the balanced lung cancer dataset, but Welch's $t$-test is optimal for the imbalanced breast cancer dataset. This suggests the choice of feature-selection method should be validated per dataset rather than fixed in advance, particularly when class balance or sample size differs substantially between tasks.
+    \item \textbf{Leakage Prevention:} Embedding feature selection strictly within cross-validation folds via scikit-learn \texttt{Pipeline} ensures rigorous, unbiased validation of high-dimensional genomic classifiers, and is what allows the majority-class collapse on GSE42568 to be detected in the first place -- had feature selection been performed on the full dataset before splitting, the resulting optimistic bias could have masked this failure mode.
 \end{enumerate}
+
+\subsection{Limitations}
+
+Two limitations of this evaluation are worth noting for the interpretation of the GSE42568 results in particular. First, with only $17$ normal-tissue samples split across $5$ folds, each test fold contains just $3$--$4$ minority-class samples, so specificity estimates carry substantial variance (as reflected in the large standard deviations reported in Table~\ref{tab:gse42568_svm_results}); a larger or resampled minority class (e.g.\ via SMOTE) would allow more stable estimates. Second, all Path B pipelines fix the feature-subset size at $k=20$; it is possible that a different $k$, tuned specifically for the imbalanced setting, would yield a less noisy and more consistently positive MCC than observed here.
