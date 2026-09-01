@@ -27,7 +27,54 @@ Each pipeline is scored on five folds and reported as mean $\pm$ standard deviat
 
 \section{Imbalanced-Data Extensions and Model Tuning}
 
-The GSE42568 analysis was extended beyond the original fixed-threshold, fixed-$k$, fixed-$C$ SVM setup to test whether the poor minority-class performance was driven by the classifier design or by the imbalance itself. In the updated implementation, each Path B model was evaluated under four additional conditions: fold-wise SMOTE applied only to the training split, threshold selection from raw decision-function scores using Youden's $J$, a tuned subset size $k \in \{10, 20, 50, 100\}$, and an inner-CV search for the SVM regularization parameter $C$. The same feature-selection pipelines were also evaluated using logistic regression and random forest as robustness checks, so that the majority-class collapse could be distinguished from a generic imbalance effect on the dataset.
+\subsection{Scope and Methodology}
+
+The GSE42568 analysis was extended beyond the original fixed-threshold, fixed-$k$, fixed-$C$ SVM setup to test whether the poor minority-class performance was driven by the classifier design or by the imbalance itself. \textbf{These extensions were evaluated exclusively on the Welch's $t$-test filter variant}, as the $t$-test was the only Path B method achieving a clearly positive MCC ($ > 0$) on the imbalanced dataset. Extending the full factorial to all six Path B methods would have been computationally expensive without clear benefit, since the wrapper and embedded methods already showed either negative MCC or complete majority-class collapse on GSE42568 in the baseline evaluation.
+
+The following variants of the Welch $t$-test pipeline were evaluated:
+\begin{itemize}
+    \item Baseline: default decision threshold (0.0), $k = 20$ features, $C = 1.0$
+    \item SMOTE: fold-wise resampling applied during training
+    \item Threshold tuning: Youden's $J$ statistic applied to decision-function scores
+    \item $C$ tuning: inner-CV grid search for SVM regularization ($C \in [10^{-4}, 10^{-3}, \ldots, 10^{2}]$)
+    \item Logistic regression: alternative classifier using the same selected 20 features
+    \item Random forest: alternative classifier using the same selected 20 features
+\end{itemize}
+
+The resulting experiments show that the improvement is not a generic consequence of resampling or threshold tuning alone: the original $t$-test filter with default settings remains the most informative baseline, while the additional settings either do not improve the minority-class signal or push the model back toward majority-class prediction.
+
+\begin{table}[H]
+\centering
+\caption{GSE42568 extension results for the Welch $t$-test pipeline (5-fold CV). Six variants of the baseline $t$-test selector are shown: default settings, SMOTE resampling, threshold tuning via Youden's $J$, inner-CV tuning of $C$, and robustness checks with logistic regression and random forest classifiers.}
+\label{tab:gse42568_extensions}
+\small
+\resizebox{\textwidth}{!}{
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{Variant} & \textbf{Accuracy} & \textbf{Recall} & \textbf{Specificity} & \textbf{F1-Score} & \textbf{MCC} & \textbf{ROC-AUC} \\
+\midrule
+Baseline (default threshold, $k=20$) & $0.6237 \pm 0.293$ & $0.6238 \pm 0.415$ & $0.5333 \pm 0.506$ & $0.6552 \pm 0.385$ & $0.1139 \pm 0.169$ & $0.5414 \pm 0.196$ \\
+SMOTE inside CV folds & $0.6933 \pm 0.067$ & $0.7786 \pm 0.056$ & $0.1500 \pm 0.224$ & $0.8132 \pm 0.042$ & $-0.0508 \pm 0.228$ & $0.4792 \pm 0.236$ \\
+Threshold tuned (Youden $J$) & $0.6237 \pm 0.293$ & $0.6238 \pm 0.415$ & $0.5333 \pm 0.506$ & $0.6552 \pm 0.385$ & $0.1139 \pm 0.169$ & $0.5786 \pm 0.114$ \\
+$C$ tuned by inner CV & $0.4987 \pm 0.348$ & $0.4776 \pm 0.484$ & $0.5333 \pm 0.506$ & $0.4996 \pm 0.418$ & $0.0193 \pm 0.090$ & $0.6561 \pm 0.140$ \\
+Logistic regression check & $0.3237 \pm 0.257$ & $0.2238 \pm 0.309$ & $0.9333 \pm 0.149$ & $0.2819 \pm 0.387$ & $0.1139 \pm 0.169$ & $0.5862 \pm 0.149$ \\
+Random-forest check & $0.8430 \pm 0.035$ & $0.9705 \pm 0.045$ & $0.0500 \pm 0.112$ & $0.9134 \pm 0.023$ & $0.0180 \pm 0.091$ & $0.5633 \pm 0.117$ \\
+\bottomrule
+\end{tabular}
+}
+\end{table}
+
+\textbf{\textsf{Verification Note:}} Two rows warrant cautious interpretation. The ``Threshold tuned (Youden $J$)'' row shows identical Accuracy, Recall, and MCC to the Baseline, despite threshold optimization; this suggests the tuned threshold may not have been applied correctly during prediction. The ``Logistic regression check'' shows MCC = 0.1139 identical to Baseline to 4 decimal places despite substantially different Accuracy and Recall, which is atypical and may indicate a data collection error. These rows should be re-generated to confirm reproducibility before drawing firm conclusions from them.
+
+\medskip
+
+\textbf{\textsf{Interpretation of Table~\ref{tab:gse42568_extensions}:}} The Specificity column (proportion of normal samples correctly identified) reveals the key trade-offs. The Baseline achieves Specificity = 53.33\%, genuinely detecting roughly half the normal samples, which is why MCC remains positive. By contrast, SMOTE drops Specificity to 15\%, trading minority-class recall for majority-class prediction — worse overall balance. The Random Forest check attains very high Accuracy and Recall but collapses to 5\% Specificity, showing it predicts almost every sample as cancer, a failure mode masked by high accuracy alone. The Logistic Regression check is the only variant that raises Specificity to 93.33\%, but at the cost of dropping Recall to 22.38\%, again illustrating the sensitivity/specificity trade-off without achieving balanced improvement. Only the Baseline and $C$-tuning variant maintain Specificity $\ge$ 50\%, but $C$-tuning worsens overall accuracy and MCC. Collectively, these results confirm that the Welch $t$-test filter with default settings provides the best balance available on GSE42568 for this severely imbalanced task.
+
+This table reflects the actual project execution and underscores the core challenge: when the minority class is tiny ($n=17$), SMOTE, threshold tuning, and classifier tuning offer no clear remedy. The original $t$-test filter remains the most defensible default for GSE42568 in the current implementation.
+
+\medskip
+
+\textbf{\textsf{Note on Wilcoxon Significance Testing:}} The implementation includes a paired Wilcoxon signed-rank helper function in \texttt{svm\_classifier.py} for comparing MCC distributions across variants. However, this test was \textbf{not} applied to generate any reported results in this chapter. Consequently, no Wilcoxon $p$-values appear in the quantitative tables above. The helper remains available as a reusable utility for future paired-sample comparisons, but the evidence presented here relies solely on the fold-wise cross-validation metrics.
 
 \section{Quantitative Results on GSE19804 (Balanced Dataset)}
 
@@ -38,6 +85,7 @@ Table~\ref{tab:gse19804_svm_results} presents the 5-fold stratified cross-valida
 \caption{5-Fold Stratified Cross-Validation performance on GSE19804 ($k=20, p \le 0.05$).}
 \label{tab:gse19804_svm_results}
 \small
+\resizebox{\textwidth}{!}{
 \begin{tabular}{lcccccc}
 \toprule
 \textbf{Pipeline Path} & \textbf{Accuracy} & \textbf{Precision} & \textbf{Recall} & \textbf{F1-Score} & \textbf{MCC} & \textbf{ROC-AUC} \\
@@ -52,6 +100,7 @@ Table~\ref{tab:gse19804_svm_results} presents the 5-fold stratified cross-valida
 \textbf{Path B: LASSO ($L_1$)} & $0.9250 \pm 0.090$ & $0.9385$ & $0.9167$ & $0.9234 \pm 0.090$ & $0.8560 \pm 0.177$ & $0.9819$ \\
 \bottomrule
 \end{tabular}
+}
 \end{table}
 
 \begin{figure}[H]
@@ -82,6 +131,7 @@ Table~\ref{tab:gse42568_svm_results} reports performance on the imbalanced GSE42
 \caption{5-Fold Stratified Cross-Validation performance on GSE42568 ($k=20, p \le 0.05$).}
 \label{tab:gse42568_svm_results}
 \small
+\resizebox{\textwidth}{!}{
 \begin{tabular}{lcccccc}
 \toprule
 \textbf{Pipeline Path} & \textbf{Accuracy} & \textbf{Recall} & \textbf{Specificity} & \textbf{F1-Score} & \textbf{MCC} & \textbf{ROC-AUC} \\
@@ -96,6 +146,7 @@ Table~\ref{tab:gse42568_svm_results} reports performance on the imbalanced GSE42
 \textbf{Path B: LASSO ($L_1$)} & $0.8353 \pm 0.055$ & $0.9710$ & $0.0000 \pm 0.000$ & $0.9095 \pm 0.033$ & $-0.0444 \pm 0.062$ & $0.4434$ \\
 \bottomrule
 \end{tabular}
+}
 \end{table}
 
 \begin{figure}[H]
@@ -127,4 +178,16 @@ The empirical evaluation leads to four major findings:
 
 \subsection{Limitations}
 
-The main limitation in the original imbalanced analysis was that a single fixed subset size and a fixed SVM decision threshold could mask the extent to which the minority-class signal was genuinely weak or merely under-optimized. The additional SMOTE and $k$-tuning experiments were therefore introduced to test whether the poor GSE42568 performance was due to feature-set choice, classifier calibration, or the severe sample imbalance itself. In practice, the results remain sensitive to the small minority class ($n=17$), so specificity and MCC remain high-variance estimates even after resampling and threshold optimization. The principal takeaway is not that the imbalance is fully solved, but that the failure mode is now better isolated: the problem is not simply an arbitrary fixed-$k$ artifact, and the remaining uncertainty is dominated by the limited minority-class sample size rather than by the feature-selection pipeline alone.
+The principal limitations of the imbalanced GSE42568 analysis are:
+
+\begin{enumerate}
+    \item \textbf{Fixed feature subset:} All reported results use a fixed $k = 20$. A full k-sweep (e.g. $k \in [5, 10, 15, 20, 30, 50]$) was not performed; hence it remains unclear whether a different subset size would yield substantially better minority-class recovery.
+    
+    \item \textbf{Data quality in extensions table:} Two rows in Table~\ref{tab:gse42568_extensions} (threshold tuning and logistic regression) show suspicious patterns (identical MCC values despite different accuracy, or metrics unchanged after optimization) that suggest potential data collection errors. These variants should be re-generated to confirm reproducibility.
+    
+    \item \textbf{High variance from small minority class:} With only $n=17$ normal samples split across 5 folds, each fold contains just $3$--$4$ normal samples in the test set. This leads to high-variance estimates of specificity and MCC; a single misclassification swings fold-level specificity by $25$--$33\%$. Consequently, even the Welch $t$-test baseline ($\text{MCC} = +0.1139 \pm 0.169$) carries substantial uncertainty, and the extension variants are similarly noisy.
+    
+    \item \textbf{Scope of extensions:} The SMOTE, threshold tuning, $C$ tuning, and alternative-classifier checks (Table~\ref{tab:gse42568_extensions}) were evaluated only on the Welch $t$-test feature selector. The other five Path B methods were not extended, so it remains unknown whether these tuning strategies would improve their performance on GSE42568.
+\end{enumerate}
+
+Despite these limitations, the results do demonstrate a genuine and consistent failure of the full-dimensional baseline (Path A) on GSE42568, and confirm that feature selection is a necessary (though not sufficient) step for this imbalanced task. The remaining uncertainty is dominated by the limited minority-class sample size rather than by a single easily correctable methodological choice.
