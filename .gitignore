@@ -12,8 +12,7 @@
 *.lot
 *.out
 *.toc
-*.synctex.gz
-*.synctex
+*.synctex*
 *.pdf
 main.pdf
 
@@ -88,16 +87,19 @@ preprocessed_datasets/
 *.h5
 
 # ============================================================
-# Results (ORGANIZED BY DATASET)
+# Results (generated artifacts)
 # ============================================================
-# Ignore large result files but track README structure
-results/GSE19804_lung_cancer/*.json
-results/GSE19804_lung_cancer/*.csv
-results/GSE19804_lung_cancer/*.log
+# Ignore feature-selection outputs and model-run artifacts.
+results/feature_selection/**
+results/**/*.csv
+results/**/*.json
+results/**/*.log
+results/**/*.txt
+!results/README.md
 
-results/GSE42568_breast_cancer/*.json
-results/GSE42568_breast_cancer/*.csv
-results/GSE42568_breast_cancer/*.log
+# Ignore per-dataset result directories.
+results/GSE19804_lung_cancer/**
+results/GSE42568_breast_cancer/**
 
 # ============================================================
 # OS specific

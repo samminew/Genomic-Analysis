@@ -55,6 +55,36 @@ where $\bar{x}_{c,j}$ and $\bar{x}_{n,j}$ denote the sample means in the cancer 
 
 The ANOVA F-test evaluates whether the between-group variance exceeds the within-group variance for each probe. Probes with larger F-scores and smaller associated $p$-values are treated as more discriminative. As with Welch's $t$-test, the ANOVA filter applies the combined $p \leq 0.05$ significance constraint and top-$k=20$ ranking rule.
 
+\subsubsection{BH-FDR Ranked Filter}
+
+The final filter variant used in the project implements a Benjamini-Hochberg (BH) false-discovery-rate control step before ranking. For each probe, the pipeline first computes the ANOVA F-statistic and associated $p$-value, then applies BH adjustment to the full probe set. Features with adjusted $p$-value $q \leq 0.05$ are retained, and the survivors are ranked by a combined score formed from the percentile ranks of:
+
+\begin{itemize}
+    \item ANOVA F-score,
+    \item Cohen's $d$ effect size, and
+    \item mutual information between probe expression and class label.
+\end{itemize}
+
+The combined ranking is the arithmetic mean of the three percentile ranks, and the top $k$ probes are selected from this filtered pool. This makes the FDR-ranked selector more conservative than the raw univariate filters: it does not simply take the strongest $k$ unadjusted features, but instead requires statistical evidence after multiple-testing correction before a probe is considered competitive.
+
+\subsubsection{Within-Fold Resampling for Imbalanced Training}
+
+For the imbalanced breast-cancer benchmark (GSE42568), the training split was further adjusted with a fold-protected resampling step. Synthetic Minority Over-sampling Technique (SMOTE) was applied only after feature selection on the training fold and strictly never on the held-out test fold. This avoids leakage while increasing the effective number of minority-class samples in the training data. The implementation uses the standard SMOTE variant with $k_{\text{neighbors}} = 5$, with a guard that clamps the neighbor count to the available minority-class count in a fold so that very small training folds do not fail during resampling.
+
+\subsubsection{Threshold Tuning from Decision Scores}
+
+The classification threshold was not fixed at the default value $0.5$ for the imbalanced analyses. Instead, after a classifier was trained, the decision-function scores from the training-fold predictions were used to select the threshold that maximized Youden's $J$ statistic:
+
+\begin{equation}
+    J = \text{Sensitivity} + \text{Specificity} - 1.
+\end{equation}
+
+This thresholding step was computed from the raw decision-function values rather than from probability estimates, avoiding the additional Platt-scaling cross-validation that would otherwise be triggered by setting the SVM to use \texttt{probability=True}. The same underlying decision score is also used to report the default-threshold and tuned-threshold comparisons for the imbalanced dataset.
+
+\subsubsection{Nested Tuning of $k$ and $C$}
+
+Two additional model-selection steps were added for the imbalanced setting. First, the subset size $k$ was swept over $\{10, 20, 50, 100\}$ inside an inner cross-validation loop, and the value maximizing mean MCC was retained for the outer evaluation. Second, the SVM regularization parameter $C$ was tuned with a compact inner-CV search over $\{0.01, 0.1, 1, 10, 100\}$, while comparing class-weight settings of either \texttt{None} or \texttt{"balanced"}. This keeps the SVM optimization consistent with the class-imbalance problem without expanding the experimental design into an unnecessarily expensive double-nested loop beyond the required model-selection steps.
+
 \subsection{Wrapper Methods}
 
 \subsubsection{SVM-RFE and Random-Forest Importance}

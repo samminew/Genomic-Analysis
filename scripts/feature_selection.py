@@ -17,8 +17,8 @@ Arguments
 --label-col Name of the target/label column in the CSV (default: "label").
 --n-features  Number of features to select per method (default: 20).
 --methods   Space-separated subset of methods to run (default: all).
-            Choices: filter_ttest  filter_anova  wrapper_svm  wrapper_rf
-                     embedded_lasso
+            Choices: filter_ttest  filter_anova  filter_fdr_ranked
+                     wrapper_svm  wrapper_rf  embedded_lasso
 --results-dir  Directory to write results into.
             Default: <project_root>/results/feature_selection
 --no-feature-files  Skip writing per-method .txt feature lists.
@@ -60,9 +60,9 @@ from typing import Optional
 
 import numpy as np
 import pandas as pd
-from scipy.stats import ttest_ind
+from scipy.stats import ttest_ind, false_discovery_control
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.feature_selection import RFE, SelectKBest, f_classif
+from sklearn.feature_selection import RFE, SelectKBest, f_classif, mutual_info_classif
 from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
 from sklearn.base import BaseEstimator, TransformerMixin
 import matplotlib.pyplot as plt
@@ -90,6 +90,7 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
     DISPLAY_NAMES: dict[str, str] = {
         "filter_ttest":     "Welch's T-Test (Filter)",
         "filter_anova":     "ANOVA F-Test (Filter)",
+        "filter_fdr_ranked": "FDR-Ranked (F-score + MI + Effect Size)",
         "wrapper_svm":      "SVM-RFE (Wrapper)",
         "wrapper_rf":       "RandomForest Importance (Wrapper)",
         "embedded_lasso":   "LASSO / L1 Logistic (Embedded)",
@@ -129,6 +130,7 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
         dispatch = {
             "filter_ttest":     self._fit_ttest,
             "filter_anova":     self._fit_anova,
+            "filter_fdr_ranked": self._fit_fdr_ranked,
             "wrapper_svm":      self._fit_wrapper_svm,
             "wrapper_rf":       self._fit_wrapper_rf,
             "embedded_lasso":   self._fit_embedded_lasso,
@@ -165,6 +167,8 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
             raise ValueError("filter_ttest requires exactly 2 classes.")
         X0, X1 = X[y == classes[0]], X[y == classes[1]]
         _, p_values = ttest_ind(X1, X0, axis=0, equal_var=False)
+        p_values = np.nan_to_num(p_values, nan=1.0, posinf=1.0, neginf=1.0)
+        p_values = np.clip(p_values, 0.0, 1.0)
         # If a p-value threshold is provided, select top-k features meeting p <= p_value.
         if self.p_value is not None:
             mask = np.where(p_values <= float(self.p_value))[0]
@@ -193,6 +197,8 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
         logger.info("[filter_anova]  ANOVA F-Test …")
         # Compute F-statistic and associated p-values
         F, p_values = f_classif(X, y)
+        p_values = np.nan_to_num(p_values, nan=1.0, posinf=1.0, neginf=1.0)
+        p_values = np.clip(p_values, 0.0, 1.0)
         # If a p-value threshold is provided, select top-k features meeting p <= p_value.
         if self.p_value is not None:
             mask = np.where(p_values <= float(self.p_value))[0]
@@ -221,6 +227,110 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
         self.feature_scores = F
         logger.info(f"  → {len(self.selected_features)} features selected ({self.selection_rule})")
 
+    def _compute_cohens_d(self, X: np.ndarray, y: np.ndarray) -> np.ndarray:
+        """
+        Compute Cohen's d (standardized effect size) for each feature.
+        Assumes binary classification (y in {0, 1}).
+        """
+        classes = np.unique(y)
+        if len(classes) != 2:
+            raise ValueError("Cohen's d requires exactly 2 classes.")
+        
+        X0, X1 = X[y == classes[0]], X[y == classes[1]]
+        n0, n1 = len(X0), len(X1)
+        
+        mean0 = np.mean(X0, axis=0)
+        mean1 = np.mean(X1, axis=0)
+        var0 = np.var(X0, axis=0, ddof=1)
+        var1 = np.var(X1, axis=0, ddof=1)
+        
+        # Pooled standard deviation
+        pooled_std = np.sqrt(((n0 - 1) * var0 + (n1 - 1) * var1) / (n0 + n1 - 2))
+        
+        # Avoid division by zero
+        pooled_std = np.where(pooled_std == 0, 1e-10, pooled_std)
+        
+        cohens_d = (mean1 - mean0) / pooled_std
+        return np.abs(cohens_d)
+
+    def _percentile_rank(self, values: np.ndarray) -> np.ndarray:
+        """
+        Convert values to percentile ranks in [0, 1].
+        Handles ties uniformly by averaging ranks.
+        """
+        # rankdata returns 1-based ranks; convert to 0-based percentiles
+        from scipy.stats import rankdata
+        ranks = rankdata(values, method='average')
+        percentiles = (ranks - 1) / (len(values) - 1) if len(values) > 1 else np.zeros_like(ranks)
+        return percentiles
+
+    def _fit_fdr_ranked(self, X: np.ndarray, y: np.ndarray) -> None:
+        """
+        FDR-based ranking: BH filter -> F-score + Cohen's d + MI -> percentile ranks -> top-k.
+        
+        Steps:
+        1. Compute adjusted p-values using Benjamini-Hochberg correction.
+        2. Hard filter to features with FDR < 0.05.
+        3. For survivors, compute: ANOVA F-score, Cohen's d, mutual information.
+        4. Convert each metric to percentile ranks (to handle outliers).
+        5. Average ranks with equal weights (1/3 each).
+        6. Select top n_features by combined rank.
+        """
+        logger.info("[filter_fdr_ranked]  FDR-ranked (BH + F-score + MI + Effect Size) …")
+        
+        # Step 1: Compute adjusted p-values and filter by FDR < 0.05
+        F, p_values = f_classif(X, y)
+        F = np.nan_to_num(F, nan=0.0, posinf=0.0, neginf=0.0)
+        p_values = np.nan_to_num(p_values, nan=1.0, posinf=1.0, neginf=1.0)
+        p_values = np.clip(p_values, 0.0, 1.0)
+        adjusted_pvalues = false_discovery_control(p_values, method='bh')
+        adjusted_pvalues = np.nan_to_num(adjusted_pvalues, nan=1.0, posinf=1.0, neginf=1.0)
+        adjusted_pvalues = np.clip(adjusted_pvalues, 0.0, 1.0)
+        
+        fdr_mask = adjusted_pvalues <= 0.05
+        survivor_indices = np.where(fdr_mask)[0]
+        
+        if survivor_indices.size == 0:
+            logger.warning(
+                "[filter_fdr_ranked] No features survived FDR < 0.05; "
+                f"falling back to top-{self.n_features} by F-score"
+            )
+            self.selection_rule = f"fallback_top_k({self.n_features})"
+            order = np.argsort(-F)
+            self.selected_features = order[: self.n_features]
+            self.feature_scores = F
+            logger.info(f"  → {len(self.selected_features)} features selected ({self.selection_rule})")
+            return
+        
+        logger.info(f"  FDR < 0.05: {survivor_indices.size} features passed; ranking …")
+        
+        # Step 2: Compute three ranking metrics on the survivors
+        X_survivors = X[:, survivor_indices]
+        F_survivors = F[survivor_indices]
+        
+        # Cohen's d (effect size)
+        cohens_d = self._compute_cohens_d(X_survivors, y)
+        
+        # Mutual information (requires integer labels, y is already 0/1)
+        mi = mutual_info_classif(X_survivors, y, random_state=42)
+        
+        # Step 3: Convert each metric to percentile ranks
+        f_ranks = self._percentile_rank(F_survivors)
+        d_ranks = self._percentile_rank(cohens_d)
+        mi_ranks = self._percentile_rank(mi)
+        
+        # Step 4: Combine with equal weights
+        combined_ranks = (f_ranks + d_ranks + mi_ranks) / 3.0
+        
+        # Step 5: Select top n_features
+        k = min(self.n_features, survivor_indices.size)
+        top_indices_in_survivors = np.argsort(-combined_ranks)[:k]
+        self.selected_features = survivor_indices[top_indices_in_survivors]
+        
+        self.feature_scores = F
+        self.selection_rule = f"fdr_ranked(fdr<0.05, top_{k})"
+        logger.info(f"  → {len(self.selected_features)} features selected ({self.selection_rule})")
+
     # ------------------------------------------------------------------
     # Wrapper helpers
     # ------------------------------------------------------------------
@@ -232,6 +342,8 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
         # selecting by p-value (up to max_k). Otherwise fall back to top-k ANOVA.
         if getattr(self, "p_value", None) is not None:
             _, p_values = f_classif(X, y)
+            p_values = np.nan_to_num(p_values, nan=1.0, posinf=1.0, neginf=1.0)
+            p_values = np.clip(p_values, 0.0, 1.0)
             mask = np.where(p_values <= float(self.p_value))[0]
             if mask.size == 0:
                 logger.warning(

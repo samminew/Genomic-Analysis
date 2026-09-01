@@ -38,6 +38,11 @@ from sklearn.metrics import (
 from sklearn.model_selection import StratifiedKFold
 from sklearn.pipeline import Pipeline
 from sklearn.svm import SVC
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.base import clone
+from scipy.stats import wilcoxon
+from imblearn.over_sampling import SMOTE
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
 
@@ -170,6 +175,132 @@ class SVMClassifierWithCV:
         logger.info(f"Class distribution: {np.bincount(self.y).tolist()}")
 
     # ------------------------------------------------------------------
+    # Imbalanced-data helpers used for GSE42568 experiments
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _apply_fold_safe_smote(X: np.ndarray | pd.DataFrame, y: np.ndarray, k_neighbors: int = 5, sampling_strategy: str = "minority") -> tuple[np.ndarray, np.ndarray, int]:
+        """Apply SMOTE only to the training fold while guarding k_neighbors for tiny minority folds."""
+        if X is None or y is None or len(y) == 0:
+            return np.asarray(X), np.asarray(y), 0
+
+        X_arr = np.asarray(X)
+        y_arr = np.asarray(y)
+        n_minority = int(np.sum(y_arr == 1)) if np.unique(y_arr).size == 2 else 0
+
+        if n_minority <= 1:
+            return X_arr, y_arr, 0
+
+        safe_k = max(1, min(int(k_neighbors), int(n_minority - 1)))
+        if safe_k <= 0:
+            return X_arr, y_arr, 0
+
+        try:
+            sampler = SMOTE(sampling_strategy=sampling_strategy, k_neighbors=safe_k, random_state=42)
+            X_res, y_res = sampler.fit_resample(X_arr, y_arr)
+            return X_res, y_res, safe_k
+        except Exception:
+            sampler = SMOTE(sampling_strategy=sampling_strategy, k_neighbors=1, random_state=42)
+            X_res, y_res = sampler.fit_resample(X_arr, y_arr)
+            return X_res, y_res, 1
+
+    @staticmethod
+    def _select_youden_threshold(decision_scores: np.ndarray, y_true: np.ndarray) -> float:
+        """Choose threshold maximizing Youden's J from raw decision_function scores."""
+        scores = np.asarray(decision_scores, dtype=float)
+        labels = np.asarray(y_true, dtype=int)
+        if scores.size == 0:
+            return 0.0
+
+        thresholds = np.unique(scores)
+        best_threshold = float(thresholds[0]) if thresholds.size else 0.0
+        best_j = -np.inf
+
+        for threshold in thresholds:
+            y_pred = (scores >= threshold).astype(int)
+            tn, fp, fn, tp = confusion_matrix(labels, y_pred, labels=[0, 1]).ravel()
+            sensitivity = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+            specificity = tn / (tn + fp) if (tn + fp) > 0 else 0.0
+            j_stat = sensitivity + specificity - 1.0
+            if j_stat > best_j:
+                best_j = j_stat
+                best_threshold = float(threshold)
+
+        if not np.isfinite(best_threshold):
+            best_threshold = 0.0
+        return float(best_threshold)
+
+    @staticmethod
+    def _select_best_c_inner_cv(X_train: pd.DataFrame, y_train: np.ndarray, c_grid: Optional[list[float]] = None, class_weight_options: Optional[list[Optional[str]]] = None) -> dict:
+        """Tune C and class_weight with a compact inner CV using MCC and decision_function thresholds."""
+        if c_grid is None:
+            c_grid = [0.01, 0.1, 1.0, 10.0, 100.0]
+        if class_weight_options is None:
+            class_weight_options = [None, "balanced"]
+
+        best = {"C": 1.0, "class_weight": "balanced", "mcc_mean": -np.inf, "threshold": 0.0}
+        inner_cv = StratifiedKFold(n_splits=min(5, min(np.bincount(y_train).min(), 5)), shuffle=True, random_state=42)
+
+        for class_weight in class_weight_options:
+            for C_val in c_grid:
+                fold_scores = []
+                for inner_train_idx, inner_valid_idx in inner_cv.split(X_train, y_train):
+                    model = SVC(
+                        kernel="linear",
+                        C=C_val,
+                        class_weight=class_weight,
+                        random_state=42,
+                        probability=False,
+                    )
+                    model.fit(X_train.iloc[inner_train_idx], y_train[inner_train_idx])
+                    decision = model.decision_function(X_train.iloc[inner_valid_idx])
+                    threshold = SVMClassifierWithCV._select_youden_threshold(decision, y_train[inner_valid_idx])
+                    predictions = (decision >= threshold).astype(int)
+                    fold_scores.append(matthews_corrcoef(y_train[inner_valid_idx], predictions))
+                mean_mcc = float(np.mean(fold_scores))
+                if mean_mcc > best["mcc_mean"]:
+                    best = {"C": float(C_val), "class_weight": class_weight, "mcc_mean": mean_mcc, "threshold": 0.0}
+        return best
+
+    @staticmethod
+    def _compute_oof_youden_threshold(X_train: pd.DataFrame, y_train: np.ndarray, C_val: float, class_weight: Optional[str]) -> tuple[float, np.ndarray, np.ndarray]:
+        """Compute out-of-fold decision scores and a Youden threshold for a fixed C and class_weight."""
+        inner_cv = StratifiedKFold(n_splits=min(5, min(np.bincount(y_train).min(), 5)), shuffle=True, random_state=42)
+        oof_scores = []
+        oof_labels = []
+
+        for inner_train_idx, inner_valid_idx in inner_cv.split(X_train, y_train):
+            model = SVC(
+                kernel="linear",
+                C=C_val,
+                class_weight=class_weight,
+                random_state=42,
+                probability=False,
+            )
+            model.fit(X_train.iloc[inner_train_idx], y_train[inner_train_idx])
+            valid_scores = model.decision_function(X_train.iloc[inner_valid_idx])
+            oof_scores.extend(valid_scores.tolist())
+            oof_labels.extend(y_train[inner_valid_idx].tolist())
+
+        threshold = SVMClassifierWithCV._select_youden_threshold(np.asarray(oof_scores), np.asarray(oof_labels))
+        return threshold, np.asarray(oof_scores), np.asarray(oof_labels)
+
+    @staticmethod
+    def _paired_wilcoxon_test(scores_a: np.ndarray, scores_b: np.ndarray) -> float:
+        """Return the two-sided Wilcoxon signed-rank p-value for paired MCC scores."""
+        a = np.asarray(scores_a, dtype=float)
+        b = np.asarray(scores_b, dtype=float)
+        if a.shape != b.shape:
+            raise ValueError("Paired Wilcoxon test requires equal-length score arrays.")
+        diffs = a - b
+        if np.allclose(diffs, 0.0):
+            return 1.0
+        try:
+            _, p_value = wilcoxon(diffs, zero_method='wilcox', alternative='two-sided')
+            return float(p_value)
+        except Exception:
+            return 1.0
+
+    # ------------------------------------------------------------------
     # Evaluation
     # ------------------------------------------------------------------
     def evaluate_predictions( 
@@ -255,19 +386,16 @@ class SVMClassifierWithCV:
     # ------------------------------------------------------------------
     # Path B — Optimised (LEAKAGE-FREE via sklearn Pipeline)
     # ------------------------------------------------------------------
-    def train_path_b_optimized(self, feature_method: str = "filter_ttest", n_features: int = 20, p_value: Optional[float] = None) -> None:
+    def train_path_b_optimized(self, feature_method: str = "filter_ttest", n_features: int = 20, p_value: Optional[float] = None, apply_smote: bool = False, tune_threshold: bool = False, tune_k: Optional[int] = None, tune_c: bool = False, alternative_classifier: Optional[str] = None) -> None:
         """
-        Evaluate SVM with feature selection applied strictly INSIDE each 
-        training fold using sklearn.pipeline.Pipeline.
-        
-        This guarantees ZERO data leakage: the feature selector only ever 
-        sees the training data for that specific fold.
+        Evaluate SVM with feature selection applied strictly INSIDE each training fold using sklearn.pipeline.Pipeline.
+
+        This guarantees ZERO data leakage: the feature selector only ever sees the training data for that specific fold.
         """
         logger.info("\n" + "=" * 70)
         logger.info(f"PATH B: OPTIMISED — Feature selection: {feature_method} (n={n_features})")
         logger.info("=" * 70)
 
-        # Determine p_value to use: method arg overrides the instance default
         p_value = p_value if p_value is not None else getattr(self, "p_value", None)
 
         cv = StratifiedKFold(
@@ -279,57 +407,92 @@ class SVMClassifierWithCV:
             logger.info(f"--- Fold {fold_num}/{self.n_splits} ---")
 
             X_train = self.X.iloc[train_idx]
-            X_test  = self.X.iloc[test_idx]
+            X_test = self.X.iloc[test_idx]
             y_train = self.y[train_idx]
-            y_test  = self.y[test_idx]
+            y_test = self.y[test_idx]
 
-            # CRITICAL: Pipeline ensures fit_transform happens ONLY on train data.
-            # The test data is transformed using the parameters learned from the train data.
-            pipeline = Pipeline([
-                ('selector', FeatureSelector(method=feature_method, n_features=n_features, p_value=p_value)),
-                ('svm', SVC(
-                    kernel="linear", C=1.0,
-                    random_state=self.random_state,
-                    class_weight="balanced",
-                    probability=True,
-                ))
-            ])
+            selected_k = n_features if tune_k is None else tune_k
+            if apply_smote:
+                X_train_raw = X_train.copy()
+                y_train_raw = y_train.copy()
+                X_train_resampled, y_train, _ = self._apply_fold_safe_smote(X_train_raw, y_train_raw, k_neighbors=5)
+                X_train = pd.DataFrame(X_train_resampled, columns=X_train_raw.columns)
+                logger.info(f"  SMOTE applied within fold: {X_train.shape[0]} samples, minority count={np.sum(y_train==1)}")
 
-            # Fit the entire pipeline on the training fold
-            try:
-                pipeline.fit(X_train.values, y_train)
-            except Exception as exc:
-                logger.error(f"  Pipeline fit failed on fold {fold_num}: {exc}")
-                # Abort this method early; mark as failed
-                return
-
-            # Extract the number of features actually selected (handles LASSO edge cases)
-            try:
-                n_selected = len(pipeline.named_steps['selector'].selected_features)
-            except Exception:
-                n_selected = None
+            selector = FeatureSelector(method=feature_method, n_features=selected_k, p_value=p_value)
+            X_train_array = X_train.to_numpy() if isinstance(X_train, pd.DataFrame) else np.asarray(X_train)
+            X_test_array = X_test.to_numpy() if isinstance(X_test, pd.DataFrame) else np.asarray(X_test)
+            selector.fit(X_train_array, y_train)
+            X_train_selected = selector.transform(X_train_array)
+            X_test_selected = selector.transform(X_test_array)
+            n_selected = len(selector.selected_features)
             logger.info(f"  Reduced to {n_selected} features for this fold")
 
-            # Predict on the test fold (pipeline automatically applies the trained selector)
-            try:
-                y_pred       = pipeline.predict(X_test.values)
-                y_pred_proba = pipeline.predict_proba(X_test.values)
-            except Exception as exc:
-                logger.error(f"  Pipeline predict failed on fold {fold_num}: {exc}")
-                return
+            C_value = 1.0
+            if tune_c:
+                tuned = self._select_best_c_inner_cv(X_train, y_train, c_grid=[0.01, 0.1, 1.0, 10.0, 100.0], class_weight_options=[None, "balanced"])
+                C_value = tuned["C"]
+                logger.info(f"  Tuned C={C_value} with class_weight={tuned['class_weight']}")
+            threshold = 0.0
+            if tune_threshold:
+                inner_cv = StratifiedKFold(n_splits=min(5, min(np.bincount(y_train).min(), 5)), shuffle=True, random_state=self.random_state)
+                oof_scores = []
+                oof_labels = []
+                for inner_train_idx, inner_valid_idx in inner_cv.split(X_train_selected, y_train):
+                    model = SVC(kernel="linear", C=C_value, class_weight="balanced", random_state=self.random_state, probability=False)
+                    model.fit(X_train_selected[inner_train_idx], y_train[inner_train_idx])
+                    oof_scores.extend(model.decision_function(X_train_selected[inner_valid_idx]).tolist())
+                    oof_labels.extend(y_train[inner_valid_idx].tolist())
+                threshold = self._select_youden_threshold(np.asarray(oof_scores), np.asarray(oof_labels))
+                logger.info(f"  Tuned threshold (Youden J) = {threshold:.4f}")
 
-            metrics = self.evaluate_predictions(y_test, y_pred, y_pred_proba)
-            metrics["n_features"]     = n_selected
+            if alternative_classifier == 'logistic_regression':
+                clf = LogisticRegression(C=1.0, class_weight='balanced', max_iter=2000, random_state=self.random_state)
+                clf.fit(X_train_selected, y_train)
+                y_pred = clf.predict(X_test_selected)
+                y_pred_proba = clf.predict_proba(X_test_selected)
+            elif alternative_classifier == 'random_forest':
+                clf = RandomForestClassifier(n_estimators=300, random_state=self.random_state, class_weight='balanced')
+                clf.fit(X_train_selected, y_train)
+                y_pred = clf.predict(X_test_selected)
+                y_pred_proba = clf.predict_proba(X_test_selected)
+            else:
+                model = SVC(
+                    kernel="linear",
+                    C=C_value,
+                    random_state=self.random_state,
+                    class_weight="balanced",
+                    probability=False,
+                )
+                model.fit(X_train_selected, y_train)
+                decision_scores = model.decision_function(X_test_selected)
+                if tune_threshold:
+                    y_pred = (decision_scores >= threshold).astype(int)
+                    y_pred_proba = np.column_stack([1 - (decision_scores >= threshold).astype(float), (decision_scores >= threshold).astype(float)])
+                else:
+                    y_pred = model.predict(X_test_selected)
+                    y_pred_proba = model.decision_function(X_test_selected)
+
+            if alternative_classifier is None and not tune_threshold:
+                metrics = self.evaluate_predictions(y_test, y_pred, None if y_pred_proba is None else np.column_stack([1 - y_pred_proba, y_pred_proba])) if isinstance(y_pred_proba, np.ndarray) and y_pred_proba.ndim == 1 else self.evaluate_predictions(y_test, y_pred, None if y_pred_proba is None else np.column_stack([1 - (y_pred_proba >= 0), y_pred_proba >= 0]))
+            else:
+                if alternative_classifier is None and isinstance(y_pred_proba, np.ndarray) and y_pred_proba.ndim == 1:
+                    y_pred_proba = np.column_stack([1 - (y_pred_proba - y_pred_proba.min()) / (y_pred_proba.max() - y_pred_proba.min() + 1e-9), (y_pred_proba - y_pred_proba.min()) / (y_pred_proba.max() - y_pred_proba.min() + 1e-9)])
+                metrics = self.evaluate_predictions(y_test, y_pred, None if y_pred_proba is None or (isinstance(y_pred_proba, np.ndarray) and y_pred_proba.ndim == 1) else y_pred_proba)
+
+            metrics["n_features"] = n_selected
             metrics["feature_method"] = feature_method
             fold_results.append(metrics)
 
-            logger.info(
-                f"  Accuracy: {metrics['accuracy']:.4f} |  "
-                f"MCC: {metrics['mcc']:.4f} | F1: {metrics['f1']:.4f} "
-            )
+            logger.info(f"  Accuracy: {metrics['accuracy']:.4f} | MCC: {metrics['mcc']:.4f} | Specificity: {metrics.get('specificity', 0.0):.4f}")
 
-        # Key pattern: "path_b_{method}" — no orphan "path_b" key
         key = f"path_b_{feature_method}"
+        if tune_threshold:
+            key = f"path_b_{feature_method}_threshold_tuned"
+        if tune_c:
+            key = f"path_b_{feature_method}_c_tuned"
+        if alternative_classifier is not None:
+            key = f"path_b_{feature_method}_{alternative_classifier}"
         self.results[key] = {"fold_results": fold_results}
         self._aggregate_cv_results(fold_results, key)
 
@@ -338,8 +501,26 @@ class SVMClassifierWithCV:
         logger.info("-" * 70)
         self._print_cv_summary(key)
 
-    # ------------------------------------------------------------------
-    # Aggregation & display
+    def run_improved_imbalanced_analysis(self, dataset_name: Optional[str] = None) -> dict:
+        """Run the set of imbalanced-data experiments requested for GSE42568: SMOTE, tuned threshold, tuned C, and alternate classifiers."""
+        dataset_name = dataset_name or self.dataset_name
+        results = {}
+
+        for method in FeatureSelectionPipeline.ALL_METHODS:
+            for config in [
+                {"label": f"{method}_baseline", "apply_smote": False, "tune_threshold": False, "tune_c": False, "alternative_classifier": None},
+                {"label": f"{method}_smote", "apply_smote": True, "tune_threshold": False, "tune_c": False, "alternative_classifier": None},
+                {"label": f"{method}_threshold_tuned", "apply_smote": False, "tune_threshold": True, "tune_c": False, "alternative_classifier": None},
+                {"label": f"{method}_c_tuned", "apply_smote": False, "tune_threshold": False, "tune_c": True, "alternative_classifier": None},
+                {"label": f"{method}_logreg", "apply_smote": False, "tune_threshold": False, "tune_c": False, "alternative_classifier": "logistic_regression"},
+                {"label": f"{method}_rf", "apply_smote": False, "tune_threshold": False, "tune_c": False, "alternative_classifier": "random_forest"},
+            ]:
+                try:
+                    self.train_path_b_optimized(feature_method=method, n_features=self.n_features, p_value=self.p_value, apply_smote=config["apply_smote"], tune_threshold=config["tune_threshold"], tune_c=config["tune_c"], alternative_classifier=config["alternative_classifier"])
+                    results[config["label"]] = self.results.get(f"path_b_{method}_threshold_tuned" if config["tune_threshold"] else f"path_b_{method}_c_tuned" if config["tune_c"] else f"path_b_{method}_{config['alternative_classifier']}" if config["alternative_classifier"] is not None else f"path_b_{method}")
+                except Exception as exc:
+                    logger.error(f"Imbalanced-data experiment failed for {method}: {exc}")
+        return results
     # ------------------------------------------------------------------
     def _aggregate_cv_results(self, fold_results: list[dict], path_name: str) -> None:
         metrics_df = pd.DataFrame(fold_results)
