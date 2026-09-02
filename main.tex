@@ -1,4 +1,4 @@
-\documentclass[14.49998pt,a4paper]{report}
+\documentclass[14.49998pt,a4paper]{book}
 \usepackage{mystyle}
 
 % Set line spacing
@@ -54,15 +54,23 @@
 
 
 % ============================================================
-% DECLARATION
+% DECLARATION & DEDICATION
 % ============================================================
+\addcontentsline{toc}{chapter}{DECLARATION}
 \input{chapters/declaration}
 \newpage
 
+\addcontentsline{toc}{chapter}{DEDICATION}
+\input{chapters/dedication}
+\newpage
 % ============================================================
-% ABSTRACT
+% ABSTRACT & ACKNOWLEDGMENT
 % ============================================================
 \input{chapters/abstract} %Akyen, Abstract typically comes before toc.
+\newpage
+
+\addcontentsline{toc}{chapter}{ACKNOWLEDGMENT}
+\input{chapters/acknowledgment}
 \newpage
 
 % ============================================================
@@ -87,7 +95,7 @@
 \newpage
 
 %REFERENCES
-\renewcommand{\bibname}{References}
+\renewcommand{\bibname}{REFERENCES}
 \bibliographystyle{abbrvnat}
 \footnotesize
 \bibliography{references}
