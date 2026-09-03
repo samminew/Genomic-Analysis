@@ -1,17 +1,5 @@
-\documentclass[14.49998pt,a4paper]{report}
-% Modern LaTeX handles UTF-8 by default, removed inputenc to avoid MiKTeX issues
-\usepackage[margin=1in]{geometry}
-\usepackage{graphicx}
-\usepackage{amsmath}
-\usepackage{amssymb}
-\usepackage{setspace}
-\usepackage{fancyhdr}
-\usepackage{hyperref}
-\usepackage{booktabs}
-\usepackage{float}
-\usepackage{caption}
-\usepackage{subcaption}
-\usepackage{xcolor}
+\documentclass[14.49998pt,a4paper,openany]{report}
+\usepackage{mystyle}
 
 % Set line spacing
 \onehalfspacing
@@ -25,7 +13,7 @@
 % Title page setup
 \title{EFFECT OF FEATURE SELECTION ON CLASSIFICATION ACCURACY ON HIGH-DIMENSIONAL GENE EXPRESSION DATA}
 \author{DARKO SAMUEL AND AKYEN SAMUEL}
-\date{}
+%\date{}
 
 \begin{document}
 
@@ -33,39 +21,57 @@
 % TITLE PAGE
 % ============================================================
 \begin{titlepage}
-    \centering
-    \vspace*{0.5cm}
-
-    {\Large\textbf{KWAME NKRUMAH UNIVERSITY OF SCIENCE AND TECHNOLOGY, KUMASI}}
-
-    \vspace{1.5cm}
-
-    % University Logo (adjust path as needed)
     \begin{center}
-        \includegraphics[width=3cm]{knust_logo.png}
-    \end{center}
+       \textbf{\large KWAME NKRUMAH  UNIVERSITY OF SCIENCE AND TECHNOLOGY, KUMASI}
+        \vspace{1.5cm}
+        % University Logo (adjust path as needed)
+        \begin{center}
+            \includegraphics[width=3cm]{knust_logo.png}
+        \end{center}
 
-    \vspace{1.5cm}
+        \vspace{1.5cm}
+        {\Large\textbf{EFFECT OF FEATURE SELECTION ON CLASSIFICATION ACCURACY ON HIGH-DIMENSIONAL GENE EXPRESSION DATA}}
 
-    {\Large\textbf{EFFECT OF FEATURE SELECTION ON CLASSIFICATION ACCURACY ON HIGH-DIMENSIONAL GENE EXPRESSION DATA}}
+        \vspace{2cm}
 
-    \vspace{2cm}
+        {\textbf{BY}}
 
-    {\textbf{BY}}
+        \vspace{0.5cm}
 
-    \vspace{0.5cm}
+        {\textbf{AKYEN SAMUEL AND DARKO SAMUEL}}
 
-    {\textbf{AKYEN SAMUEL AND DARKO SAMUEL}}
+        \vspace{3cm}
 
-    \vspace{3cm}
+        {\normalsize A PROJECT REPORT SUBMITTED TO THE DEPARTMENT OF MATHEMATICS, KWAME NKRUMAH UNIVERSITY OF SCIENCE AND TECHNOLOGY IN PARTIAL FULFILLMENT OF THE REQUIREMENT FOR THE DEGREE OF BSc. MATHEMATICS}
 
-    {\normalsize A PROJECT REPORT SUBMITTED TO THE DEPARTMENT OF MATHEMATICS, KWAME NKRUMAH UNIVERSITY OF SCIENCE AND TECHNOLOGY IN PARTIAL FULFILLMENT OF THE REQUIREMENT FOR THE DEGREE OF BSc. MATHEMATICS}
+        \vfill
 
-    \vfill
+        {\normalsize \today}
 
-    \today
 
+\end{center}
 \end{titlepage}
+
+
+% ============================================================
+% DECLARATION & DEDICATION
+% ============================================================
+\addcontentsline{toc}{chapter}{DECLARATION}
+\input{chapters/declaration}
+\newpage
+
+\addcontentsline{toc}{chapter}{DEDICATION}
+\input{chapters/dedication}
+\newpage
+% ============================================================
+% ABSTRACT & ACKNOWLEDGMENT
+% ============================================================
+\input{chapters/abstract} %Akyen, Abstract typically comes before toc.
+\newpage
+
+\addcontentsline{toc}{chapter}{ACKNOWLEDGMENT}
+\input{chapters/acknowledgment}
+\newpage
 
 % ============================================================
 % TABLE OF CONTENTS
@@ -86,5 +92,13 @@
 \newpage
 
 \input{chapters/chapter4_svm_evaluation}
+\newpage
+
+%REFERENCES
+%\renewcommand{\bibname}{REFERENCES}
+\bibliographystyle{abbrvnat}
+\footnotesize
+\bibliography{references}
+
 
 \end{document}
