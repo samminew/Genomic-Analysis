@@ -81,6 +81,16 @@ In embedded methods, feature selection occurs as part of the model training proc
 
 The $L_1$ penalty forces coefficients of irrelevant genes to exactly zero, effectively selecting a sparse gene list. The hyperparameter $\lambda$ controls the degree of sparsity.
 
+%==========================================================
+% FEATURE SELECTION CHART IMAGE
+%==========================================================
+\vspace{1.5cm}
+\begin{center}
+    \includegraphics[width=0.88\textwidth]{FSchart.jpeg}
+    \captionof{figure}{Feature Selection Methods Overview}\citep{a_review_of_feature}
+\end{center}
+%=========================================================
+
 \section{Problem Statement}
 
 Gene expression datasets contain thousands of gene features but relatively few samples. This high dimensionality can negatively affect classification performance by increasing model variance, promoting overfitting, introducing noise from irrelevant or redundant features, and poor generalization in classification tasks. While feature selection is commonly used to address this issue, it is not always clear which feature selection techniques most effectively improve classification accuracy on high-dimensional gene expression data.
